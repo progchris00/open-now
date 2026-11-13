@@ -1,0 +1,59 @@
+openapi: 3.1.0
+info:
+  title: OpenNow API
+  version: 0.1.0
+paths:
+  /api/health:
+    get:
+      operationId: getHealth
+      summary: Check API and database health
+      security: []
+      responses:
+        "200":
+          description: API, database, and PostGIS are healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: The database or PostGIS is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthError"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - database
+        - postgis
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        database:
+          type: string
+          enum: [ok]
+        postgis:
+          type: string
+          enum: [ok]
+    HealthError:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - database
+        - postgis
+      properties:
+        status:
+          type: string
+          enum: [error]
+        database:
+          type: string
+          enum: [unavailable]
+        postgis:
+          type: string
+          enum: [unknown]

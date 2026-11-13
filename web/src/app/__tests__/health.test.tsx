@@ -1,12 +1,12 @@
 import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 
 describe("health page", () => {
   it("renders_app_shell", async () => {
-    const pagePath = fileURLToPath(new URL("../page.tsx", import.meta.url));
+    const pagePath = resolve(process.cwd(), "src/app/page.tsx");
 
     expect(
       existsSync(pagePath),
