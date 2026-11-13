@@ -1,38 +1,35 @@
 # OpenNow
 
-OpenNow runs its full local development stack behind one Caddy origin. The stack
+OpenNow runs its local development stack behind one Caddy origin. The stack
 contains the Next.js web app, Django API, Celery worker and beat scheduler,
 PostgreSQL with PostGIS, Redis, and Caddy.
 
 ## Start the stack
 
-Start every service from a fresh clone:
+From a fresh clone, start all seven services:
 
 ```bash
 docker compose up --build
 ```
 
-The defaults are for local development. Copy `.env.example` to `.env` when you
-want to override them.
-
-Open <http://localhost:8080>. Caddy serves the web app and forwards `/api/*` to
-Django. The public health response is available at
-<http://localhost:8080/api/health>, and its OpenAPI schema is available at
+Open <http://localhost:8080>. Caddy serves the web app and forwards `/api/*`
+to Django. The public health endpoint is available at
+<http://localhost:8080/api/health>, and the generated schema is available at
 <http://localhost:8080/api/schema/>.
 
-## Run checks locally
+Copy `.env.example` to `.env` to override the local defaults.
 
-Backend checks use the Python environment locked in `backend/uv.lock` and expect
-a PostgreSQL database with the PostGIS extension:
+## Run backend checks
+
+Start the database first, then run the checks from the repository root:
 
 ```bash
-cd backend
-uv sync
-uv run ruff check .
-uv run pytest --cov=core --cov-branch --cov-fail-under=80
+docker compose up -d db redis
+uv run --project backend ruff check backend
+uv run --project backend pytest --cov=backend/core --cov-branch --cov-fail-under=80
 ```
 
-Web checks use the lockfile in `web/`:
+## Run web checks
 
 ```bash
 cd web
@@ -43,6 +40,3 @@ pnpm run typecheck
 pnpm exec vitest run --coverage
 pnpm run build
 ```
-
-The generated client types live at `web/src/api/schema.d.ts`; regenerate them
-after changing `backend/openapi.yaml`.

@@ -11,7 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Report the public service health */
+        /** Check API and database health */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -27,11 +27,19 @@ export interface components {
     schemas: {
         HealthResponse: {
             /** @enum {string} */
-            status: "ok" | "error";
+            status: "ok";
             /** @enum {string} */
-            database: "ok" | "error";
+            database: "ok";
             /** @enum {string} */
-            postgis: "ok" | "missing" | "error";
+            postgis: "ok";
+        };
+        HealthError: {
+            /** @enum {string} */
+            status: "error";
+            /** @enum {string} */
+            database: "unavailable";
+            /** @enum {string} */
+            postgis: "unknown";
         };
     };
     responses: never;
@@ -51,7 +59,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The API, database, and PostGIS extension are available. */
+            /** @description API, database, and PostGIS are healthy */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -60,13 +68,13 @@ export interface operations {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
             };
-            /** @description A required service is unavailable. */
+            /** @description The database or PostGIS is unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HealthResponse"];
+                    "application/json": components["schemas"]["HealthError"];
                 };
             };
         };

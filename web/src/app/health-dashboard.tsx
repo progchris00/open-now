@@ -4,98 +4,105 @@ import { useEffect, useState } from "react";
 
 import type { components } from "@/api/schema";
 
-type Health = components["schemas"]["HealthResponse"];
-type ViewState =
+
+type HealthResponse = components["schemas"]["HealthResponse"];
+type HealthState =
   | { kind: "loading" }
   | { kind: "empty" }
-  | { kind: "error"; message: string }
-  | { kind: "success"; health: Health };
+  | { kind: "error" }
+  | { kind: "success"; health: HealthResponse };
 
-const serviceLabels: Record<keyof Omit<Health, "status">, string> = {
-  database: "PostgreSQL",
-  postgis: "PostGIS",
-};
+function isHealthResponse(value: unknown): value is HealthResponse {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
 
-export function HealthDashboard() {
-  const [state, setState] = useState<ViewState>({ kind: "loading" });
+  const candidate = value as Record<string, unknown>;
+  return (
+    candidate.status === "ok" &&
+    candidate.database === "ok" &&
+    candidate.postgis === "ok"
+  );
+}
 
-  useEffect(() => {
-    const controller = new AbortController();
+async function fetchHealthState(): Promise<HealthState> {
+  try {
+    const response = await fetch("/api/health", {
+      headers: { Accept: "application/json" },
+    });
 
-    async function loadHealth() {
-      try {
-        const response = await fetch("/api/health", {
-          signal: controller.signal,
-          headers: { Accept: "application/json" },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Health check failed with status ${response.status}`);
-        }
-
-        const body = await response.text();
-        if (!body) {
-          setState({ kind: "empty" });
-          return;
-        }
-
-        setState({ kind: "success", health: JSON.parse(body) as Health });
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-
-        setState({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Health check failed",
-        });
-      }
+    if (!response.ok) {
+      throw new Error("Health endpoint is unavailable");
     }
 
-    void loadHealth();
-    return () => controller.abort();
+    const health: unknown = await response.json();
+    return isHealthResponse(health)
+      ? { kind: "success", health }
+      : { kind: "empty" };
+  } catch {
+    return { kind: "error" };
+  }
+}
+
+export function HealthDashboard() {
+  const [state, setState] = useState<HealthState>({ kind: "loading" });
+
+  useEffect(() => {
+    let active = true;
+
+    void fetchHealthState().then((healthState) => {
+      if (active) {
+        setState(healthState);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (state.kind === "loading") {
-    return <p className="state-card">Checking services…</p>;
+    return <p role="status">Checking services…</p>;
   }
 
   if (state.kind === "empty") {
-    return <p className="state-card">No health data was returned.</p>;
+    return <p role="status">No health information is available.</p>;
   }
 
   if (state.kind === "error") {
     return (
-      <section className="state-card state-card--error" role="alert">
-        <h2>Health check unavailable</h2>
-        <p>{state.message}</p>
-      </section>
+      <div role="alert" className="error-state">
+        <p>OpenNow services could not be reached.</p>
+        <button
+          type="button"
+          onClick={() => {
+            setState({ kind: "loading" });
+            void fetchHealthState().then(setState);
+          }}
+        >
+          Try again
+        </button>
+      </div>
     );
   }
 
+  const services = [
+    ["API", state.health.status],
+    ["Database", state.health.database],
+    ["PostGIS", state.health.postgis],
+  ];
+
   return (
-    <section aria-labelledby="service-health">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Live response</p>
-          <h2 id="service-health">Services are ready</h2>
+    <dl className="service-list">
+      {services.map(([name, serviceStatus]) => (
+        <div className="service-row" key={name}>
+          <dt>{name}</dt>
+          <dd>
+            <span aria-hidden="true" className="status-dot" />
+            {serviceStatus}
+          </dd>
         </div>
-        <span className="overall-status">{state.health.status}</span>
-      </div>
-      <div className="service-grid">
-        {Object.entries(serviceLabels).map(([service, label]) => {
-          const status = state.health[service as keyof typeof serviceLabels];
-          return (
-            <article className="service-card" key={service}>
-              <span className="status-dot" aria-hidden="true" />
-              <div>
-                <h3>{label}</h3>
-                <p>{status}</p>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </section>
+      ))}
+    </dl>
   );
 }

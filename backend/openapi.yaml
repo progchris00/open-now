@@ -6,20 +6,21 @@ paths:
   /api/health:
     get:
       operationId: getHealth
-      summary: Report the public service health
+      summary: Check API and database health
+      security: []
       responses:
         "200":
-          description: The API, database, and PostGIS extension are available.
+          description: API, database, and PostGIS are healthy
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
         "503":
-          description: A required service is unavailable.
+          description: The database or PostGIS is unavailable
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthResponse"
+                $ref: "#/components/schemas/HealthError"
 components:
   schemas:
     HealthResponse:
@@ -32,10 +33,27 @@ components:
       properties:
         status:
           type: string
-          enum: [ok, error]
+          enum: [ok]
         database:
           type: string
-          enum: [ok, error]
+          enum: [ok]
         postgis:
           type: string
-          enum: [ok, missing, error]
+          enum: [ok]
+    HealthError:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - database
+        - postgis
+      properties:
+        status:
+          type: string
+          enum: [error]
+        database:
+          type: string
+          enum: [unavailable]
+        postgis:
+          type: string
+          enum: [unknown]

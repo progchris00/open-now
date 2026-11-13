@@ -1,3 +1,3 @@
 export default function Loading() {
-  return <p className="state-card">Loading OpenNow…</p>;
+  return <p role="status">Loading OpenNow…</p>;
 }

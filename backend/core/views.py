@@ -1,36 +1,68 @@
-from __future__ import annotations
-
-from pathlib import Path
-
 from django.db import DatabaseError, connection
-from django.http import FileResponse, JsonResponse
-from django.views.decorators.http import require_GET
+from drf_spectacular.utils import extend_schema
+from rest_framework import serializers, status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 
 
-@require_GET
-def health(request) -> JsonResponse:
+class HealthResponseSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=["ok"])
+    database = serializers.ChoiceField(choices=["ok"])
+    postgis = serializers.ChoiceField(choices=["ok"])
+
+
+class HealthErrorSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=["error"])
+    database = serializers.ChoiceField(choices=["unavailable"])
+    postgis = serializers.ChoiceField(choices=["unknown"])
+
+
+@extend_schema(
+    operation_id="getHealth",
+    responses={
+        status.HTTP_200_OK: HealthResponseSerializer,
+        status.HTTP_503_SERVICE_UNAVAILABLE: HealthErrorSerializer,
+    },
+    auth=[],
+)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def health(request) -> Response:
+    del request
+
     try:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT extversion FROM pg_extension WHERE extname = 'postgis'"
+                "SELECT EXISTS("
+                "SELECT 1 FROM pg_extension WHERE extname = 'postgis'"
+                ")"
             )
-            postgis = cursor.fetchone()
+            has_postgis = cursor.fetchone()[0]
     except DatabaseError:
-        return JsonResponse(
-            {"status": "error", "database": "error", "postgis": "error"},
-            status=503,
+        return Response(
+            {
+                "status": "error",
+                "database": "unavailable",
+                "postgis": "unknown",
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    if postgis is None:
-        return JsonResponse(
-            {"status": "error", "database": "ok", "postgis": "missing"},
-            status=503,
+    if not has_postgis:
+        return Response(
+            {
+                "status": "error",
+                "database": "unavailable",
+                "postgis": "unknown",
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    return JsonResponse({"status": "ok", "database": "ok", "postgis": "ok"})
-
-
-@require_GET
-def openapi_schema(request) -> FileResponse:
-    contract = Path(__file__).resolve().parent.parent / "openapi.yaml"
-    return FileResponse(contract.open("rb"), content_type="application/yaml")
+    return Response(
+        {
+            "status": "ok",
+            "database": "ok",
+            "postgis": "ok",
+        }
+    )

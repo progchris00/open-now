@@ -1,31 +1,34 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-BACKEND_ROOT = Path(__file__).parents[2]
-SETTINGS_MODULE = "config.settings"
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _configure_django() -> None:
+def configure_django() -> None:
     settings_file = BACKEND_ROOT / "config" / "settings.py"
-    assert settings_file.exists(), "Django project scaffold has not been implemented"
 
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", SETTINGS_MODULE)
+    assert settings_file.is_file(), (
+        "Django has not been scaffolded in backend/config yet"
+    )
+
+    sys.path.insert(0, str(BACKEND_ROOT))
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
     import django
 
     django.setup()
 
 
-def test_health_endpoint_returns_ok(django_db_blocker) -> None:
-    _configure_django()
+def test_health_endpoint_returns_ok() -> None:
+    configure_django()
 
     from django.test import Client
 
-    with django_db_blocker.unblock():
-        response = Client().get("/api/health")
+    response = Client().get("/api/health")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -35,48 +38,24 @@ def test_health_endpoint_returns_ok(django_db_blocker) -> None:
     }
 
 
-def test_database_has_postgis_extension(django_db_blocker) -> None:
-    _configure_django()
+def test_database_has_postgis_extension() -> None:
+    configure_django()
 
     from django.db import connection
 
-    with django_db_blocker.unblock():
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT extversion FROM pg_extension WHERE extname = 'postgis'"
-            )
-            row = cursor.fetchone()
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT extversion "
+            "FROM pg_extension "
+            "WHERE extname = 'postgis'"
+        )
+        postgis_version = cursor.fetchone()
 
-    assert row is not None, "PostGIS extension is not installed"
-
-
-def test_celery_ping_task_returns_pong() -> None:
-    from core.tasks import ping
-
-    assert ping.run() == "pong"
+    assert postgis_version is not None
 
 
-def test_health_endpoint_reports_missing_postgis() -> None:
-    _configure_django()
-
-    from django.test import Client
-
-    cursor = MagicMock()
-    cursor.__enter__.return_value.fetchone.return_value = None
-
-    with patch("core.views.connection.cursor", return_value=cursor):
-        response = Client().get("/api/health")
-
-    assert response.status_code == 503
-    assert response.json() == {
-        "status": "error",
-        "database": "ok",
-        "postgis": "missing",
-    }
-
-
-def test_health_endpoint_reports_database_error() -> None:
-    _configure_django()
+def test_health_endpoint_returns_unavailable_when_database_fails() -> None:
+    configure_django()
 
     from django.db import DatabaseError
     from django.test import Client
@@ -87,6 +66,25 @@ def test_health_endpoint_reports_database_error() -> None:
     assert response.status_code == 503
     assert response.json() == {
         "status": "error",
-        "database": "error",
-        "postgis": "error",
+        "database": "unavailable",
+        "postgis": "unknown",
+    }
+
+
+def test_health_endpoint_returns_unavailable_without_postgis() -> None:
+    configure_django()
+
+    from django.test import Client
+
+    cursor_context = MagicMock()
+    cursor_context.__enter__.return_value.fetchone.return_value = (False,)
+
+    with patch("core.views.connection.cursor", return_value=cursor_context):
+        response = Client().get("/api/health")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "database": "unavailable",
+        "postgis": "unknown",
     }

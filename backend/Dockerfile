@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -6,12 +6,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY --from=ghcr.io/astral-sh/uv:0.9.10 /uv /uvx /bin/
+RUN groupadd --system app \
+    && useradd --system --gid app --create-home app
+
+COPY --from=ghcr.io/astral-sh/uv:0.11.9 /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
-COPY . .
+COPY --chown=app:app . .
+RUN chown app:app /app
 
-EXPOSE 8000
-
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+USER app
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]

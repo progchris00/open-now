@@ -1,17 +1,17 @@
 import { HealthDashboard } from "./health-dashboard";
 
+
 export default function Page() {
   return (
-    <main className="shell">
-      <header className="hero">
-        <p className="eyebrow">OpenNow · developer environment</p>
-        <h1>OpenNow system health</h1>
+    <main className="page-shell">
+      <section className="health-card" aria-labelledby="health-heading">
+        <p className="eyebrow">OpenNow.online</p>
+        <h1 id="health-heading">OpenNow system health</h1>
         <p className="intro">
-          One view of the web app, API, database, and spatial services that power
-          local development.
+          Local development services report their current availability here.
         </p>
-      </header>
-      <HealthDashboard />
+        <HealthDashboard />
+      </section>
     </main>
   );
 }
