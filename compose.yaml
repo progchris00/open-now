@@ -1,0 +1,67 @@
+x-backend: &backend
+  build:
+    context: ./backend
+  environment:
+    DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,api}
+    DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+    DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-development-only-secret-key}
+    POSTGRES_DB: ${POSTGRES_DB:-opennow}
+    POSTGRES_USER: ${POSTGRES_USER:-opennow}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opennow}
+    POSTGRES_HOST: db
+    POSTGRES_PORT: 5432
+    CELERY_BROKER_URL: redis://redis:6379/0
+    CELERY_RESULT_BACKEND: redis://redis:6379/0
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  web:
+    build:
+      context: ./web
+
+  api:
+    <<: *backend
+    command: >-
+      sh -c "python manage.py migrate --noinput &&
+      python manage.py runserver 0.0.0.0:8000"
+
+  worker:
+    <<: *backend
+    command: celery -A config worker --loglevel=info
+
+  beat:
+    <<: *backend
+    command: celery -A config beat --loglevel=info
+
+  db:
+    image: postgis/postgis:18-3.6
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-opennow}
+      POSTGRES_USER: ${POSTGRES_USER:-opennow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opennow}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+  redis:
+    image: redis:8-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - web
+      - api
+    ports:
+      - "${APP_PORT:-8080}:80"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+
+volumes:
+  postgres_data:

@@ -1,0 +1,40 @@
+[project]
+name = "opennow-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "celery[redis]>=5.6,<5.7",
+    "django>=5.2,<5.3",
+    "djangorestframework>=3.16,<3.19",
+    "psycopg[binary]>=3.2,<4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-cov>=6,<8",
+    "pytest-django>=4.11,<5",
+    "ruff>=0.14,<0.15",
+    "schemathesis>=4,<5",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+pythonpath = ["."]
+testpaths = ["core/tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["core"]
+omit = ["core/tests/*", "backend/core/tests/*", "*/core/tests/*"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
