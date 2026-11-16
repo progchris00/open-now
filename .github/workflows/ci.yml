@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-first:
+    name: Test-first commit
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify the first branch commit contains tests only
+        run: >-
+          python3 .github/workflows/scripts/check_test_first.py
+          "${{ github.event.pull_request.base.sha }}" HEAD
+
+  backend:
+    name: Ruff, pytest, Schemathesis and coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install backend dependencies
+        run: uv sync --project backend --frozen
+      - name: Start database services
+        run: docker compose up --build --detach --wait db redis
+      - name: Run Ruff
+        run: >-
+          uv run --project backend ruff check
+          backend .github/workflows/scripts
+      - name: Check Django settings
+        run: uv run --project backend python backend/manage.py check
+      - name: Run pytest and Schemathesis with coverage
+        run: >-
+          uv run --project backend pytest backend/core/tests
+          --cov=backend/core --cov=.github/workflows/scripts
+          --cov-branch --cov-fail-under=80
+      - name: Show service logs after a failure
+        if: failure()
+        run: docker compose logs db redis
+      - name: Stop database services
+        if: always()
+        run: docker compose down --volumes
+
+  web:
+    name: TypeScript, Vitest and coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "26"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install web dependencies
+        run: pnpm --dir web install --frozen-lockfile
+      - name: Verify generated API types
+        run: pnpm --dir web run generate:api
+      - name: Run ESLint
+        run: pnpm --dir web run lint
+      - name: Run TypeScript
+        run: pnpm --dir web run typecheck
+      - name: Run Vitest with coverage
+        run: pnpm --dir web run test:coverage
+      - name: Build web app
+        run: pnpm --dir web run build
+
+  playwright:
+    name: Playwright smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "26"
+          cache: pnpm
+          cache-dependency-path: e2e/pnpm-lock.yaml
+      - name: Install Playwright
+        run: pnpm --dir e2e install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --dir e2e exec playwright install --with-deps chromium
+      - name: Prepare optional static assets directory
+        run: mkdir -p web/public
+      - name: Start OpenNow
+        run: docker compose up --build --detach --wait
+      - name: Run Playwright smoke tests
+        run: pnpm --dir e2e test
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
+      - name: Show service logs after a failure
+        if: failure()
+        run: docker compose logs
+      - name: Stop OpenNow
+        if: always()
+        run: docker compose down --volumes
