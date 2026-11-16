@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
   workflow_dispatch:
+  # The Deploy workflow calls CI on every push to develop and every release tag.
+  workflow_call:
 
 permissions:
   contents: read
@@ -10,7 +12,9 @@ permissions:
 jobs:
   test-first:
     name: Test-first commit
-    if: github.event_name == 'pull_request'
+    # Release pull requests (develop into main) carry many merged branches,
+    # so the test-first rule is checked on the pull requests into develop.
+    if: github.event_name == 'pull_request' && github.base_ref != 'main'
     runs-on: ubuntu-latest
     steps:
       - name: Check out full history
@@ -43,7 +47,7 @@ jobs:
       - name: Run Ruff
         run: >-
           uv run --project backend ruff check
-          backend .github/workflows/scripts
+          backend .github/workflows/scripts infra
       - name: Check Django settings
         run: uv run --project backend python backend/manage.py check
       - name: Run pytest and Schemathesis with coverage
@@ -51,6 +55,10 @@ jobs:
           uv run --project backend pytest backend/core/tests
           --cov=backend/core --cov=.github/workflows/scripts
           --cov-branch --cov-fail-under=80
+      - name: Run deploy tooling tests with coverage
+        run: >-
+          uv run --project backend pytest infra/tests
+          --cov=infra --cov-branch --cov-fail-under=80
       - name: Show service logs after a failure
         if: failure()
         run: docker compose logs db redis

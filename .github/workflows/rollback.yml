@@ -1,0 +1,71 @@
+name: Roll back
+
+# One step back: the environment returns to the release that ran before the
+# current one. The previous images stay on the server, so nothing is rebuilt.
+# Running it again swaps back. Database migrations are not reversed, so keep
+# migrations backward compatible (add first, remove in a later release).
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to return to its previous release
+        type: choice
+        options: [production, staging]
+        default: production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Roll back ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: https://${{ vars.APP_DOMAIN }}
+    env:
+      ENVIRONMENT: ${{ inputs.environment }}
+      IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+      SERVER_DIR: /srv/opennow/${{ inputs.environment }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Connect to the server
+        run: infra/ci/setup-ssh.sh
+        env:
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      - name: Show the releases before rolling back
+        run: >-
+          ssh opennow-server python3 $SERVER_DIR/deploy.py status
+          --env "$ENVIRONMENT"
+      - name: Roll back to the previous release
+        run: >-
+          ssh opennow-server python3 $SERVER_DIR/deploy.py rollback
+          --env "$ENVIRONMENT" --image-prefix "$IMAGE_PREFIX"
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "26"
+          cache: pnpm
+          cache-dependency-path: e2e/pnpm-lock.yaml
+      - name: Install Playwright
+        run: pnpm --dir e2e install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --dir e2e exec playwright install --with-deps chromium
+      - name: Smoke test the site
+        run: pnpm --dir e2e test
+        env:
+          PLAYWRIGHT_BASE_URL: https://${{ vars.APP_DOMAIN }}

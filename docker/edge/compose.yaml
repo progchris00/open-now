@@ -1,0 +1,26 @@
+# Edge Caddy for the Oracle server. Started once during server setup:
+#   docker compose --project-name opennow-edge \
+#     --file /srv/opennow/edge/compose.yaml \
+#     --env-file /srv/opennow/edge/.env up --detach
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    # Host networking lets the edge reach each environment's
+    # 127.0.0.1:<APP_PORT> without publishing those ports publicly.
+    network_mode: host
+    environment:
+      PRODUCTION_DOMAIN: ${PRODUCTION_DOMAIN:?Set PRODUCTION_DOMAIN in .env}
+      PRODUCTION_PORT: ${PRODUCTION_PORT:?Set PRODUCTION_PORT in .env}
+      STAGING_DOMAIN: ${STAGING_DOMAIN:?Set STAGING_DOMAIN in .env}
+      STAGING_PORT: ${STAGING_PORT:?Set STAGING_PORT in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /etc/opennow/certs:/etc/caddy/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

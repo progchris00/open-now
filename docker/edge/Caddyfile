@@ -1,0 +1,16 @@
+# Edge proxy on the Oracle server: the only thing listening on 80 and 443.
+#
+# Cloudflare proxies both domains to this server with SSL mode "Full (strict)".
+# Caddy presents the Cloudflare origin certificate and forwards each domain
+# to that environment's own Caddy on localhost.
+# The values come from /srv/opennow/edge/.env (see infra/README.md).
+
+{$PRODUCTION_DOMAIN} {
+	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
+	reverse_proxy 127.0.0.1:{$PRODUCTION_PORT}
+}
+
+{$STAGING_DOMAIN} {
+	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
+	reverse_proxy 127.0.0.1:{$STAGING_PORT}
+}
