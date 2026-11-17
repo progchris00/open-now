@@ -21,7 +21,65 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthError"
+  /api/admin/settings:
+    get:
+      operationId: getAdminSettings
+      summary: List admin settings
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      responses:
+        "200":
+          description: Current settings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Setting"
+        "403":
+          description: User is not an administrator
+  /api/admin/settings/{key}:
+    patch:
+      operationId: patchAdminSetting
+      summary: Update an admin setting
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingUpdate"
+      responses:
+        "200":
+          description: Updated setting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Setting"
+        "400":
+          description: Invalid value or locked setting
+        "403":
+          description: User is not an administrator
+        "404":
+          description: Setting does not exist
 components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    basicAuth:
+      type: http
+      scheme: basic
   schemas:
     HealthResponse:
       type: object
@@ -57,3 +115,28 @@ components:
         postgis:
           type: string
           enum: [unknown]
+    Setting:
+      type: object
+      additionalProperties: false
+      required:
+        - key
+        - value
+        - updated_by
+        - updated_at
+      properties:
+        key:
+          type: string
+        value: {}
+        updated_by:
+          type: integer
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+    SettingUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - value
+      properties:
+        value: {}

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import os
 import sys
 from pathlib import Path
@@ -75,12 +74,12 @@ def test_change_is_audited(admin_client) -> None:
         assert response.json()["key"] == "service_fee_per_order"
         assert response.json()["value"] == 8
 
-        from django.contrib.admin.models import LogEntry
+        from django.contrib.admin.models import CHANGE, LogEntry
 
         assert LogEntry.objects.filter(
             user=admin,
             object_repr="service_fee_per_order",
-            action_flag=LogEntry.CHANGE,
+            action_flag=CHANGE,
         ).exists()
     finally:
         client.patch(
@@ -106,34 +105,86 @@ def test_payment_method_is_locked_to_cod(admin_client) -> None:
 
 def test_settings_cached_and_invalidated(admin_client) -> None:
     client, _ = admin_client
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from settings_store.cache import get_setting
 
     initial = client.get("/api/admin/settings")
     assert initial.status_code == 200
     assert _settings_by_key(initial)["service_fee_per_order"]["value"] == 5
+    assert get_setting("service_fee_per_order") == 5
 
-    changed = client.patch(
-        "/api/admin/settings/service_fee_per_order",
-        {"value": 9},
-        format="json",
+    with CaptureQueriesContext(connection) as queries:
+        repeated = client.get("/api/admin/settings")
+
+    assert repeated.status_code == 200
+    assert not any("settings_store_setting" in query["sql"] for query in queries)
+
+    try:
+        changed = client.patch(
+            "/api/admin/settings/service_fee_per_order",
+            {"value": 9},
+            format="json",
+        )
+        assert changed.status_code == 200
+
+        with CaptureQueriesContext(connection) as queries:
+            refreshed = client.get("/api/admin/settings")
+
+        assert refreshed.status_code == 200
+        assert _settings_by_key(refreshed)["service_fee_per_order"]["value"] == 9
+        assert any("settings_store_setting" in query["sql"] for query in queries)
+        assert get_setting("service_fee_per_order") == 9
+    finally:
+        client.patch(
+            "/api/admin/settings/service_fee_per_order",
+            {"value": 5},
+            format="json",
+        )
+
+
+def test_settings_endpoints_are_admin_only() -> None:
+    configure_django()
+
+    from django.contrib.auth import get_user_model
+    from rest_framework.test import APIClient
+
+    client = APIClient()
+    assert client.get("/api/admin/settings").status_code == 403
+    assert (
+        client.patch(
+            "/api/admin/settings/service_fee_per_order",
+            {"value": 8},
+            format="json",
+        ).status_code
+        == 403
     )
-    assert changed.status_code == 200
 
-    refreshed = client.get("/api/admin/settings")
-    assert refreshed.status_code == 200
-    assert _settings_by_key(refreshed)["service_fee_per_order"]["value"] == 9
-
-    client.patch(
-        "/api/admin/settings/service_fee_per_order",
-        {"value": 5},
-        format="json",
+    user = get_user_model().objects.create_user(
+        username="settings-non-admin",
+        password="test-password",
     )
+    try:
+        client.force_authenticate(user=user)
+        assert client.get("/api/admin/settings").status_code == 403
+        assert (
+            client.patch(
+                "/api/admin/settings/service_fee_per_order",
+                {"value": 8},
+                format="json",
+            ).status_code
+            == 403
+        )
+    finally:
+        user.delete()
 
 
 def test_settings_endpoints_are_in_the_schemathesis_contract() -> None:
     configure_django()
 
-    from django.core.wsgi import get_wsgi_application
     import schemathesis
+    from django.core.wsgi import get_wsgi_application
 
     schema = schemathesis.openapi.from_wsgi(
         "/api/schema/?format=json",
