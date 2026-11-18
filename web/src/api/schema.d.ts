@@ -4,55 +4,21 @@
  */
 
 export interface paths {
-    "/api/admin/audit": {
+    "/api/health": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List audit entries */
-        get: operations["getAdminAudit"];
+        /** Check API and database health */
+        get: operations["getHealth"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/api/admin/cash-records": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create an append-only cash record */
-        post: operations["createAdminCashRecord"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/orders/{id}/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Change an order status */
-        patch: operations["patchAdminOrderStatus"];
         trace?: never;
     };
     "/api/admin/settings": {
@@ -89,14 +55,15 @@ export interface paths {
         patch: operations["patchAdminSetting"];
         trace?: never;
     };
-    "/api/health": {
+    "/api/admin/audit": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getHealth"];
+        /** List audit entries */
+        get: operations["getAdminAudit"];
         put?: never;
         post?: never;
         delete?: never;
@@ -109,74 +76,43 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        AuditLog: {
-            readonly id: number;
-            readonly who: number;
-            readonly what: string;
-            readonly before: unknown;
-            readonly after: unknown;
-            /** Format: date-time */
-            readonly when: string;
-        };
-        CashRecord: {
-            readonly id: number;
-            label: string;
-            /** Format: date-time */
-            readonly created_at: string;
+        HealthResponse: {
+            /** @enum {string} */
+            status: "ok";
+            /** @enum {string} */
+            database: "ok";
+            /** @enum {string} */
+            postgis: "ok";
         };
         HealthError: {
-            status: components["schemas"]["HealthErrorStatusEnum"];
-            database: components["schemas"]["HealthErrorDatabaseEnum"];
-            postgis: components["schemas"]["HealthErrorPostgisEnum"];
+            /** @enum {string} */
+            status: "error";
+            /** @enum {string} */
+            database: "unavailable";
+            /** @enum {string} */
+            postgis: "unknown";
         };
-        /**
-         * @description * `unavailable` - unavailable
-         * @enum {string}
-         */
-        HealthErrorDatabaseEnum: "unavailable";
-        /**
-         * @description * `unknown` - unknown
-         * @enum {string}
-         */
-        HealthErrorPostgisEnum: "unknown";
-        /**
-         * @description * `error` - error
-         * @enum {string}
-         */
-        HealthErrorStatusEnum: "error";
-        HealthResponse: {
-            status: components["schemas"]["Postgis1a8Enum"];
-            database: components["schemas"]["Postgis1a8Enum"];
-            postgis: components["schemas"]["Postgis1a8Enum"];
-        };
-        OrderStatus: {
-            status: components["schemas"]["OrderStatusStatusEnum"];
-        };
-        /**
-         * @description * `pending` - pending
-         *     * `accepted` - accepted
-         *     * `completed` - completed
-         *     * `cancelled` - cancelled
-         * @enum {string}
-         */
-        OrderStatusStatusEnum: "pending" | "accepted" | "completed" | "cancelled";
-        PatchedOrderStatus: {
-            status?: components["schemas"]["OrderStatusStatusEnum"];
-        };
-        PatchedSettingUpdate: {
-            value?: unknown;
-        };
-        /**
-         * @description * `ok` - ok
-         * @enum {string}
-         */
-        Postgis1a8Enum: "ok";
         Setting: {
-            readonly key: string;
-            readonly value: unknown;
-            readonly updated_by: number | null;
+            key: string;
+            value: unknown;
+            updated_by: number | null;
             /** Format: date-time */
-            readonly updated_at: string;
+            updated_at: string;
+        };
+        SettingUpdate: {
+            value: unknown;
+        };
+        AuditLog: {
+            id: number;
+            who: number | null;
+            who_label: string;
+            what: string;
+            target_type: string;
+            target_id: string;
+            before: unknown;
+            after: unknown;
+            /** Format: date-time */
+            when: string;
         };
     };
     responses: never;
@@ -187,7 +123,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    getAdminAudit: {
+    getHealth: {
         parameters: {
             query?: never;
             header?: never;
@@ -196,107 +132,23 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description API, database, and PostGIS are healthy */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuditLog"][];
+                    "application/json": components["schemas"]["HealthResponse"];
                 };
             };
-            /** @description User is not an administrator */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    createAdminCashRecord: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CashRecord"];
-                "application/x-www-form-urlencoded": components["schemas"]["CashRecord"];
-                "multipart/form-data": components["schemas"]["CashRecord"];
-            };
-        };
-        responses: {
-            201: {
+            /** @description The database or PostGIS is unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CashRecord"];
+                    "application/json": components["schemas"]["HealthError"];
                 };
-            };
-            /** @description Invalid cash record */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description User is not an administrator */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    patchAdminOrderStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["PatchedOrderStatus"];
-                "application/x-www-form-urlencoded": components["schemas"]["PatchedOrderStatus"];
-                "multipart/form-data": components["schemas"]["PatchedOrderStatus"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrderStatus"];
-                };
-            };
-            /** @description Invalid order status */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description User is not an administrator */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Order does not exist */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
@@ -309,6 +161,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Current settings */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -335,14 +188,13 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": components["schemas"]["PatchedSettingUpdate"];
-                "application/x-www-form-urlencoded": components["schemas"]["PatchedSettingUpdate"];
-                "multipart/form-data": components["schemas"]["PatchedSettingUpdate"];
+                "application/json": components["schemas"]["SettingUpdate"];
             };
         };
         responses: {
+            /** @description Updated setting */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -374,30 +226,33 @@ export interface operations {
             };
         };
     };
-    getHealth: {
+    getAdminAudit: {
         parameters: {
-            query?: never;
+            query?: {
+                target_type?: string;
+                target_id?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
+            /** @description Audit entries */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HealthResponse"];
+                    "application/json": components["schemas"]["AuditLog"][];
                 };
             };
-            503: {
+            /** @description User is not an administrator */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["HealthError"];
-                };
+                content?: never;
             };
         };
     };
