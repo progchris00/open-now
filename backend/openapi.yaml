@@ -51,6 +51,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/CashRecord'
           description: ''
+        '400':
+          description: Invalid cash record
         '403':
           description: User is not an administrator
   /api/admin/orders/{id}/status:
@@ -86,8 +88,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/OrderStatus'
           description: ''
+        '400':
+          description: Invalid order status
         '403':
           description: User is not an administrator
+        '404':
+          description: Order does not exist
   /api/admin/settings:
     get:
       operationId: getAdminSettings

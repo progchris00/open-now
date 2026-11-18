@@ -32,6 +32,7 @@ class AdminAuditView(ListAPIView):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
+
 class AdminOrderStatusView(APIView):
     permission_classes = [IsAdminUser]
 
@@ -41,8 +42,14 @@ class AdminOrderStatusView(APIView):
         request=OrderStatusSerializer,
         responses={
             status.HTTP_200_OK: OrderStatusSerializer,
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+                description="Invalid order status"
+            ),
             status.HTTP_403_FORBIDDEN: OpenApiResponse(
                 description="User is not an administrator"
+            ),
+            status.HTTP_404_NOT_FOUND: OpenApiResponse(
+                description="Order does not exist"
             ),
         },
     )
@@ -54,6 +61,7 @@ class AdminOrderStatusView(APIView):
         order.save(actor=request.user)
         return Response({"status": order.status})
 
+
 class AdminCashRecordView(APIView):
     permission_classes = [IsAdminUser]
 
@@ -63,6 +71,9 @@ class AdminCashRecordView(APIView):
         request=CashRecordSerializer,
         responses={
             status.HTTP_201_CREATED: CashRecordSerializer,
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+                description="Invalid cash record"
+            ),
             status.HTTP_403_FORBIDDEN: OpenApiResponse(
                 description="User is not an administrator"
             ),
