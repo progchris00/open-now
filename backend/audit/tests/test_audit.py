@@ -303,3 +303,41 @@ def test_invalid_cash_record_is_rejected(admin_client) -> None:
     )
 
     assert response.status_code == 400
+
+
+def test_order_status_signal_writes_audit(admin_client) -> None:
+    from django.db import transaction
+
+    from audit.models import AuditLog, Order
+
+    _, admin = admin_client
+    order = Order.objects.create(status="pending")
+    order.status = "accepted"
+    order._audit_actor = admin
+
+    with transaction.atomic():
+        order.save_base(update_fields={"status"})
+
+    entry = AuditLog.objects.get()
+    assert entry.who == admin
+    assert entry.what == "order.status"
+    assert entry.before == "pending"
+    assert entry.after == "accepted"
+
+
+def test_cash_record_signal_writes_audit(admin_client) -> None:
+    from django.db import transaction
+
+    from audit.models import AuditLog, CashRecord
+
+    _, admin = admin_client
+    record = CashRecord(actor=admin, label="cash-on-delivery")
+
+    with transaction.atomic():
+        record.save_base(force_insert=True)
+
+    entry = AuditLog.objects.get()
+    assert entry.who == admin
+    assert entry.what == "cash.record"
+    assert entry.before is None
+    assert entry.after == "cash-on-delivery"
