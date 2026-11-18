@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "core.apps.CoreConfig",
     "settings_store.apps.SettingsStoreConfig",
+    "audit.apps.AuditConfig",
 ]
 
 MIDDLEWARE = [
