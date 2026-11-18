@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -32,8 +33,10 @@ def admin_client(migrated_database):
     from django.contrib.auth import get_user_model
     from rest_framework.test import APIClient
 
+    from audit.models import AuditLog
+
     user = get_user_model().objects.create_user(
-        username="settings-admin",
+        username=f"settings-admin-{uuid4().hex}",
         password="test-password",
         is_staff=True,
     )
@@ -42,7 +45,8 @@ def admin_client(migrated_database):
 
     yield client, user
 
-    user.delete()
+    if not AuditLog.objects.filter(who=user).exists():
+        user.delete()
 
 
 def _settings_by_key(response) -> dict[str, dict[str, object]]:
@@ -137,32 +141,36 @@ def test_rejects_wrong_type_and_negative_values(admin_client) -> None:
 
 
 def test_change_is_audited(admin_client) -> None:
+    from django.db import transaction
+
+    from audit.models import AuditLog
+    from settings_store.cache import invalidate_settings_cache
+
     client, admin = admin_client
 
     try:
-        response = client.patch(
-            "/api/admin/settings/service_fee_per_order",
-            {"value": 8},
-            format="json",
-        )
+        with transaction.atomic():
+            response = client.patch(
+                "/api/admin/settings/service_fee_per_order",
+                {"value": 8},
+                format="json",
+            )
 
-        assert response.status_code == 200
-        assert response.json()["key"] == "service_fee_per_order"
-        assert response.json()["value"] == 8
+            assert response.status_code == 200
+            assert response.json()["key"] == "service_fee_per_order"
+            assert response.json()["value"] == 8
 
-        from django.contrib.admin.models import CHANGE, LogEntry
-
-        assert LogEntry.objects.filter(
-            user=admin,
-            object_repr="service_fee_per_order",
-            action_flag=CHANGE,
-        ).exists()
+            assert AuditLog.objects.filter(
+                who=admin,
+                what="setting.value",
+                target_type="settings_store.setting",
+                target_id="service_fee_per_order",
+                before=5,
+                after=8,
+            ).exists()
+            transaction.set_rollback(True)
     finally:
-        client.patch(
-            "/api/admin/settings/service_fee_per_order",
-            {"value": 5},
-            format="json",
-        )
+        invalidate_settings_cache()
 
 
 def test_payment_method_is_locked_to_cod(admin_client) -> None:

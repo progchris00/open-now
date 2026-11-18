@@ -75,6 +75,26 @@ def test_record_stores_target_and_change(admin_client) -> None:
     assert entry.when is not None
 
 
+def test_setting_change_writes_audit(admin_client) -> None:
+    from audit.models import AuditLog
+
+    client, admin = admin_client
+    response = client.patch(
+        "/api/admin/settings/service_fee_per_order",
+        {"value": 7},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    entry = AuditLog.objects.get(
+        target_type="settings_store.setting",
+        target_id="service_fee_per_order",
+        what="setting.value",
+    )
+    assert entry.who == admin
+    assert (entry.before, entry.after) == (5, 7)
+
+
 def test_system_entries_are_displayed_and_can_be_filtered(admin_client) -> None:
     from django.contrib.auth import get_user_model
 

@@ -1,6 +1,5 @@
 import math
 
-from django.contrib.admin.models import CHANGE, LogEntry
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -8,6 +7,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
+
+from audit.log import record
 
 from .cache import get_cached_settings, invalidate_settings_cache
 from .models import Setting
@@ -123,15 +124,16 @@ def admin_setting(request, key: str) -> Response:
         )
 
     with transaction.atomic():
+        before = setting.value
         setting.value = value
         setting.updated_by = request.user
         setting.save(update_fields=["value", "updated_by", "updated_at"])
-        LogEntry.objects.log_actions(
-            request.user.pk,
-            [setting],
-            CHANGE,
-            change_message="Updated setting value.",
-            single_object=True,
+        record(
+            who=request.user,
+            what="setting.value",
+            target=setting,
+            before=before,
+            after=value,
         )
         transaction.on_commit(invalidate_settings_cache)
 

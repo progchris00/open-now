@@ -195,10 +195,8 @@ components:
           type: string
         target_id:
           type: string
-        before:
-          nullable: true
-        after:
-          nullable: true
+        before: {}
+        after: {}
         when:
           type: string
           format: date-time
