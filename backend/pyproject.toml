@@ -20,7 +20,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["core/tests"]
+testpaths = ["core/tests", "settings_store/tests", "audit/tests"]
 pythonpath = ["."]
 
 [tool.ruff]

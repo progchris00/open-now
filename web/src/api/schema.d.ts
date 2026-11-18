@@ -236,6 +236,13 @@ export interface operations {
                     "application/json": components["schemas"]["CashRecord"];
                 };
             };
+            /** @description Invalid cash record */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description User is not an administrator */
             403: {
                 headers: {
@@ -270,8 +277,22 @@ export interface operations {
                     "application/json": components["schemas"]["OrderStatus"];
                 };
             };
+            /** @description Invalid order status */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description User is not an administrator */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Order does not exist */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
