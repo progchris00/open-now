@@ -11,7 +11,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 def configure_django() -> None:
     sys.path.insert(0, str(BACKEND_ROOT))
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    os.environ["DJANGO_SETTINGS_MODULE"] = "config.test_settings"
 
     import django
 
@@ -56,8 +56,52 @@ def test_seeded_defaults_match_example_values(admin_client) -> None:
 
     assert response.status_code == 200
     settings = _settings_by_key(response)
+    assert set(settings) == {
+        "payment_method",
+        "service_fee_per_order",
+        "subscription_monthly",
+        "free_months",
+        "bill_grace_days",
+        "delivery_base_fee",
+        "delivery_per_km",
+        "senior_pwd_discount_percent",
+        "return_fee",
+        "limit_new_customer",
+        "limit_regular",
+        "open_orders_new",
+        "open_orders_regular",
+        "otp_expiry_minutes",
+        "session_days",
+        "approval_target_days",
+        "checkin_lead_minutes",
+        "checkin_reminder_minutes",
+        "first_order_autopause_minutes",
+        "accept_minutes",
+        "unusual_confirm_minutes",
+        "offer_minutes",
+        "offer_max_tries",
+        "no_rider_cancel_minutes",
+        "pickup_reassign_minutes",
+        "failed_calls",
+        "failed_wait_minutes",
+    }
     assert settings["service_fee_per_order"]["value"] == 5
     assert settings["payment_method"]["value"] == "cod"
+
+
+def test_rejects_wrong_type_and_negative_values(admin_client) -> None:
+    client, _ = admin_client
+
+    for value in ("abc", -5, True):
+        response = client.patch(
+            "/api/admin/settings/service_fee_per_order",
+            {"value": value},
+            format="json",
+        )
+
+        assert response.status_code == 400
+        settings = _settings_by_key(client.get("/api/admin/settings"))
+        assert settings["service_fee_per_order"]["value"] == 5
 
 
 def test_change_is_audited(admin_client) -> None:
