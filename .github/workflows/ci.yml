@@ -53,10 +53,14 @@ jobs:
           --cov=backend/core --cov=backend/audit
           --cov=.github/workflows/scripts
           --cov-branch --cov-fail-under=80
+        env:
+          DJANGO_SETTINGS_MODULE: config.test_settings
       - name: Enforce audit package coverage
         run: >-
           uv run --project backend pytest backend/audit/tests
           --cov=backend/audit --cov-branch --cov-fail-under=80
+        env:
+          DJANGO_SETTINGS_MODULE: config.test_settings
       - name: Show service logs after a failure
         if: failure()
         run: docker compose logs db redis
