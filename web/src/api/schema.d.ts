@@ -55,6 +55,23 @@ export interface paths {
         patch: operations["patchAdminSetting"];
         trace?: never;
     };
+    "/api/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List audit entries */
+        get: operations["getAdminAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -84,6 +101,18 @@ export interface components {
         };
         SettingUpdate: {
             value: unknown;
+        };
+        AuditLog: {
+            id: number;
+            who: number | null;
+            who_label: string;
+            what: string;
+            target_type: string;
+            target_id: string;
+            before: unknown;
+            after: unknown;
+            /** Format: date-time */
+            when: string;
         };
     };
     responses: never;
@@ -190,6 +219,36 @@ export interface operations {
             };
             /** @description Setting does not exist */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getAdminAudit: {
+        parameters: {
+            query?: {
+                target_type?: string;
+                target_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Audit entries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLog"][];
+                };
+            };
+            /** @description User is not an administrator */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -71,6 +71,35 @@ paths:
           description: User is not an administrator
         "404":
           description: Setting does not exist
+  /api/admin/audit:
+    get:
+      operationId: getAdminAudit
+      summary: List audit entries
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      parameters:
+        - name: target_type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: target_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditLog"
+        "403":
+          description: User is not an administrator
 components:
   securitySchemes:
     sessionAuth:
@@ -140,3 +169,34 @@ components:
         - value
       properties:
         value: {}
+    AuditLog:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - who
+        - who_label
+        - what
+        - target_type
+        - target_id
+        - before
+        - after
+        - when
+      properties:
+        id:
+          type: integer
+        who:
+          type: [integer, "null"]
+        who_label:
+          type: string
+        what:
+          type: string
+        target_type:
+          type: string
+        target_id:
+          type: string
+        before: {}
+        after: {}
+        when:
+          type: string
+          format: date-time
