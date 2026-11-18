@@ -65,7 +65,7 @@ def test_record_stores_target_and_change(admin_client) -> None:
         after="accepted",
     )
 
-    assert entry == AuditLog.objects.get()
+    assert entry == AuditLog.objects.get(pk=entry.pk)
     assert entry.who == admin
     assert entry.what == "order.status"
     assert entry.target_type == "auth.user"
@@ -87,9 +87,12 @@ def test_setting_change_writes_audit(admin_client) -> None:
 
     assert response.status_code == 200
     entry = AuditLog.objects.get(
+        who=admin,
         target_type="settings_store.setting",
         target_id="service_fee_per_order",
         what="setting.value",
+        before=5,
+        after=7,
     )
     assert entry.who == admin
     assert (entry.before, entry.after) == (5, 7)
@@ -138,8 +141,12 @@ def test_audit_entries_are_read_only(admin_client) -> None:
     from audit.models import AuditLog
 
     client, admin = admin_client
-    record(who=admin, what="cash.record", target=admin, after="cash-on-delivery")
-    entry = AuditLog.objects.get()
+    entry = record(
+        who=admin,
+        what="cash.record",
+        target=admin,
+        after="cash-on-delivery",
+    )
 
     with pytest.raises(PermissionError):
         entry.after = "changed"
