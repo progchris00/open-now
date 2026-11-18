@@ -1,5 +1,4 @@
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.db import models, transaction
 
 
@@ -63,31 +62,13 @@ class Order(models.Model):
 
     def save(self, *args, **kwargs):
         actor = kwargs.pop("actor", None)
-        update_fields = kwargs.get("update_fields")
-        with transaction.atomic():
-            if not self._state.adding:
-                previous = type(self).objects.select_for_update().get(pk=self.pk)
-                before = previous.status
-            else:
-                before = None
-
-            status_is_saved = update_fields is None or "status" in update_fields
-            status_changed = before is not None and before != self.status
-            if status_changed and not status_is_saved:
-                status_changed = False
-            if status_changed and actor is None:
-                raise PermissionError("Order status changes require an actor.")
-            if self.status not in self.Status.values:
-                raise ValidationError({"status": "Invalid order status."})
-
-            super().save(*args, **kwargs)
-            if status_changed:
-                AuditLog.objects.create(
-                    who=actor,
-                    what="order.status",
-                    before=before,
-                    after=self.status,
-                )
+        self._audit_actor = actor
+        try:
+            with transaction.atomic():
+                return super().save(*args, **kwargs)
+        finally:
+            if hasattr(self, "_audit_actor"):
+                del self._audit_actor
 
 
 class AppendOnlyQuerySet(models.QuerySet):
@@ -117,13 +98,7 @@ class CashRecord(models.Model):
             raise PermissionError("Cash records are append-only.")
 
         with transaction.atomic():
-            super().save(*args, **kwargs)
-            AuditLog.objects.create(
-                who=self.actor,
-                what="cash.record",
-                before=None,
-                after=self.label,
-            )
+            return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         raise PermissionError("Cash records are append-only.")
