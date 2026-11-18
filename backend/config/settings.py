@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "core.apps.CoreConfig",
     "settings_store.apps.SettingsStoreConfig",
     "pricing.apps.PricingConfig",
+    "audit.apps.AuditConfig",
 ]
 
 MIDDLEWARE = [

@@ -1,142 +1,318 @@
-openapi: 3.1.0
+openapi: 3.0.3
 info:
   title: OpenNow API
   version: 0.1.0
 paths:
-  /api/health:
+  /api/admin/audit:
     get:
-      operationId: getHealth
-      summary: Check API and database health
-      security: []
-      responses:
-        "200":
-          description: API, database, and PostGIS are healthy
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthResponse"
-        "503":
-          description: The database or PostGIS is unavailable
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthError"
-  /api/admin/settings:
-    get:
-      operationId: getAdminSettings
-      summary: List admin settings
+      operationId: getAdminAudit
+      summary: List audit entries
+      tags:
+      - admin
       security:
-        - sessionAuth: []
-        - basicAuth: []
+      - cookieAuth: []
+      - basicAuth: []
       responses:
-        "200":
-          description: Current settings
+        '200':
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Setting"
-        "403":
+                  $ref: '#/components/schemas/AuditLog'
+          description: ''
+        '403':
+          description: User is not an administrator
+  /api/admin/cash-records:
+    post:
+      operationId: createAdminCashRecord
+      summary: Create an append-only cash record
+      tags:
+      - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CashRecord'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CashRecord'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CashRecord'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashRecord'
+          description: ''
+        '403':
+          description: User is not an administrator
+  /api/admin/orders/{id}/status:
+    patch:
+      operationId: patchAdminOrderStatus
+      summary: Change an order status
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrderStatus'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrderStatus'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrderStatus'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderStatus'
+          description: ''
+        '403':
+          description: User is not an administrator
+  /api/admin/settings:
+    get:
+      operationId: getAdminSettings
+      summary: List admin settings
+      tags:
+      - admin
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Setting'
+          description: ''
+        '403':
           description: User is not an administrator
   /api/admin/settings/{key}:
     patch:
       operationId: patchAdminSetting
       summary: Update an admin setting
-      security:
-        - sessionAuth: []
-        - basicAuth: []
       parameters:
-        - name: key
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
+      - in: path
+        name: key
+        schema:
+          type: string
         required: true
+      tags:
+      - admin
+      requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SettingUpdate"
+              $ref: '#/components/schemas/PatchedSettingUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSettingUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSettingUpdate'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
       responses:
-        "200":
-          description: Updated setting
+        '200':
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Setting"
-        "400":
+                $ref: '#/components/schemas/Setting'
+          description: ''
+        '400':
           description: Invalid value or locked setting
-        "403":
+        '403':
           description: User is not an administrator
-        "404":
+        '404':
           description: Setting does not exist
+  /api/health:
+    get:
+      operationId: getHealth
+      tags:
+      - health
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthError'
+          description: ''
 components:
-  securitySchemes:
-    sessionAuth:
-      type: apiKey
-      in: cookie
-      name: sessionid
-    basicAuth:
-      type: http
-      scheme: basic
   schemas:
-    HealthResponse:
+    AuditLog:
       type: object
-      additionalProperties: false
-      required:
-        - status
-        - database
-        - postgis
       properties:
-        status:
+        id:
+          type: integer
+          readOnly: true
+        who:
+          type: integer
+          readOnly: true
+        what:
           type: string
-          enum: [ok]
-        database:
+          readOnly: true
+        before:
+          readOnly: true
+          nullable: true
+        after:
+          readOnly: true
+          nullable: true
+        when:
           type: string
-          enum: [ok]
-        postgis:
+          format: date-time
+          readOnly: true
+      required:
+      - after
+      - before
+      - id
+      - what
+      - when
+      - who
+    CashRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        label:
           type: string
-          enum: [ok]
+          maxLength: 255
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - label
     HealthError:
       type: object
-      additionalProperties: false
-      required:
-        - status
-        - database
-        - postgis
       properties:
         status:
-          type: string
-          enum: [error]
+          $ref: '#/components/schemas/HealthErrorStatusEnum'
         database:
-          type: string
-          enum: [unavailable]
+          $ref: '#/components/schemas/HealthErrorDatabaseEnum'
         postgis:
-          type: string
-          enum: [unknown]
+          $ref: '#/components/schemas/HealthErrorPostgisEnum'
+      required:
+      - database
+      - postgis
+      - status
+    HealthErrorDatabaseEnum:
+      enum:
+      - unavailable
+      type: string
+      description: '* `unavailable` - unavailable'
+    HealthErrorPostgisEnum:
+      enum:
+      - unknown
+      type: string
+      description: '* `unknown` - unknown'
+    HealthErrorStatusEnum:
+      enum:
+      - error
+      type: string
+      description: '* `error` - error'
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/Postgis1a8Enum'
+        database:
+          $ref: '#/components/schemas/Postgis1a8Enum'
+        postgis:
+          $ref: '#/components/schemas/Postgis1a8Enum'
+      required:
+      - database
+      - postgis
+      - status
+    OrderStatus:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/OrderStatusStatusEnum'
+      required:
+      - status
+    OrderStatusStatusEnum:
+      enum:
+      - pending
+      - accepted
+      - completed
+      - cancelled
+      type: string
+      description: |-
+        * `pending` - pending
+        * `accepted` - accepted
+        * `completed` - completed
+        * `cancelled` - cancelled
+    PatchedOrderStatus:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/OrderStatusStatusEnum'
+    PatchedSettingUpdate:
+      type: object
+      properties:
+        value: {}
+    Postgis1a8Enum:
+      enum:
+      - ok
+      type: string
+      description: '* `ok` - ok'
     Setting:
       type: object
-      additionalProperties: false
-      required:
-        - key
-        - value
-        - updated_by
-        - updated_at
       properties:
         key:
           type: string
-        value: {}
+          readOnly: true
+        value:
+          readOnly: true
         updated_by:
           type: integer
+          readOnly: true
           nullable: true
         updated_at:
           type: string
           format: date-time
-    SettingUpdate:
-      type: object
-      additionalProperties: false
+          readOnly: true
       required:
-        - value
-      properties:
-        value: {}
+      - key
+      - updated_at
+      - updated_by
+      - value
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
