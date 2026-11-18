@@ -89,6 +89,38 @@ def test_seeded_defaults_match_example_values(admin_client) -> None:
     assert settings["payment_method"]["value"] == "cod"
 
 
+def test_every_seeded_setting_has_a_rule(admin_client) -> None:
+    from settings_store.views import RULES
+
+    client, _ = admin_client
+    response = client.get("/api/admin/settings")
+
+    assert response.status_code == 200
+    seeded = {setting["key"] for setting in response.json()}
+    assert seeded == set(RULES)
+
+
+def test_setting_without_rule_returns_bad_request(
+    admin_client,
+    monkeypatch,
+) -> None:
+    from settings_store.views import RULES
+
+    client, _ = admin_client
+    monkeypatch.delitem(RULES, "service_fee_per_order")
+
+    response = client.patch(
+        "/api/admin/settings/service_fee_per_order",
+        {"value": 8},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "value": ["This setting has no validation rule yet."]
+    }
+
+
 def test_rejects_wrong_type_and_negative_values(admin_client) -> None:
     client, _ = admin_client
 

@@ -90,7 +90,13 @@ def admin_setting(request, key: str) -> Response:
     serializer.is_valid(raise_exception=True)
 
     value = serializer.validated_data["value"]
-    rule = RULES[key]
+    rule = RULES.get(key)
+    if rule is None:
+        return Response(
+            {"value": ["This setting has no validation rule yet."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     expected_type = rule["type"]
     invalid_type = isinstance(value, bool) or not isinstance(value, expected_type)
     if isinstance(value, float) and not math.isfinite(value):
