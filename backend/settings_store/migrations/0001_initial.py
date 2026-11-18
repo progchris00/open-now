@@ -2,7 +2,6 @@ import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
 
-
 # Placeholder values. Confirm the real values before launch and update them
 # through the admin settings API rather than changing them in code.
 EXAMPLE_SETTINGS = {
