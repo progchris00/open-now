@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "drf_spectacular",
     "core.apps.CoreConfig",
+    "settings_store.apps.SettingsStoreConfig",
 ]
 
 MIDDLEWARE = [
@@ -66,6 +67,16 @@ DATABASES = {
         "PASSWORD": os.getenv("POSTGRES_PASSWORD", "opennow"),
         "HOST": os.getenv("POSTGRES_HOST", "127.0.0.1"),
         "PORT": os.getenv("POSTGRES_PORT", "5432"),
+    }
+}
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.environ.get(
+            "REDIS_CACHE_URL",
+            "redis://redis:6379/1",
+        ),
     }
 }
 
