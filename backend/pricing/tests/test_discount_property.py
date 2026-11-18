@@ -1,45 +1,45 @@
-"""Property: the discount never exceeds the eligible item subtotal.
-
-Plain pytest instead of Hypothesis, because adding Hypothesis needs the
-tech lead's approval. Every combination of the values below is checked.
-"""
+"""Property: the discount never exceeds the eligible item subtotal (S2-13.1)."""
 
 from __future__ import annotations
 
-import itertools
 import sys
 from decimal import Decimal
 from pathlib import Path
 
-import pytest
+from hypothesis import example, given
+from hypothesis import strategies as st
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(BACKEND_ROOT))
 
-PRICES = [Decimal("0"), Decimal("0.01"), Decimal("33.33"), Decimal("150"),
-          Decimal("535"), Decimal("9999.99")]
-QUANTITIES = [0, 1, 3]
-PERCENTS = [0, Decimal("0.5"), Decimal("12.5"), 20, Decimal("33.3333"), 99, 100]
-
-
-@pytest.mark.parametrize(
-    ("eligible_price", "other_price", "quantity", "percent"),
-    list(itertools.product(PRICES, PRICES, QUANTITIES, PERCENTS)),
+from pricing.discount import (  # noqa: E402
+    CartLine,
+    eligible_subtotal,
+    senior_pwd_discount,
 )
-def test_discount_never_exceeds_the_eligible_subtotal(
-    eligible_price, other_price, quantity, percent
-) -> None:
-    from pricing.discount import CartLine, eligible_subtotal, senior_pwd_discount
 
-    cart = [
-        CartLine(unit_price=eligible_price, quantity=quantity, discount_eligible=True),
-        CartLine(unit_price=other_price, quantity=1, discount_eligible=False),
-    ]
+LINES = st.lists(
+    st.builds(
+        CartLine,
+        unit_price=st.decimals(min_value=0, max_value=10_000, places=2),
+        quantity=st.integers(min_value=0, max_value=50),
+        discount_eligible=st.booleans(),
+    ),
+    max_size=12,
+)
+PERCENT = st.decimals(min_value=0, max_value=100, places=4)
 
-    discount = senior_pwd_discount(cart, senior_pwd=True, percent=percent)
 
-    assert Decimal("0") <= discount <= eligible_subtotal(cart)
-    assert senior_pwd_discount(cart, senior_pwd=False, percent=percent) == 0
+@given(lines=LINES, percent=PERCENT)
+@example(  # the sample order: 535 of items, all eligible, at 20%
+    lines=[CartLine(unit_price=Decimal("535"), quantity=1, discount_eligible=True)],
+    percent=Decimal("20"),
+)
+def test_discount_never_exceeds_the_eligible_subtotal(lines, percent) -> None:
+    discount = senior_pwd_discount(lines, senior_pwd=True, percent=percent)
+
+    assert Decimal("0") <= discount <= eligible_subtotal(lines)
+    assert senior_pwd_discount(lines, senior_pwd=False, percent=percent) == 0
 
 
 def test_sample_order() -> None:
@@ -48,8 +48,6 @@ def test_sample_order() -> None:
     Without the tick there is no discount, so the total stays 599 and the
     change 401. With the tick and all 535 eligible at 20%, 107 comes off.
     """
-    from pricing.discount import CartLine, senior_pwd_discount
-
     cart = [CartLine(unit_price=Decimal("535"), quantity=1, discount_eligible=True)]
 
     no_tick = senior_pwd_discount(cart, senior_pwd=False, percent=20)

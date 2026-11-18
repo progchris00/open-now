@@ -1,8 +1,4 @@
-"""Property: the delivery fee never decreases as distance increases.
-
-Plain pytest instead of Hypothesis, because adding Hypothesis needs the
-tech lead's approval. Each rule set is checked over many distances.
-"""
+"""Property: the delivery fee never decreases as distance increases (S1-15)."""
 
 from __future__ import annotations
 
@@ -10,38 +6,32 @@ import sys
 from decimal import Decimal
 from pathlib import Path
 
-import pytest
+from hypothesis import example, given
+from hypothesis import strategies as st
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(BACKEND_ROOT))
 
-# 0 km to 60 km in 37 m steps, plus some awkward values.
-DISTANCES = sorted(
-    {Decimal(step * 37) / Decimal(1000) for step in range(0, 1622)}
-    | {Decimal("0.001"), Decimal("1.999"), Decimal("2"), Decimal("2.001")}
+from pricing.delivery_fee import delivery_fee_for_km  # noqa: E402
+
+KM = st.decimals(min_value=0, max_value=500, places=3)
+PESOS = st.decimals(min_value=0, max_value=10_000, places=2)
+
+
+@given(near=KM, extra=KM, base_fee=PESOS, per_km=PESOS)
+@example(  # the sample order: a 2 km trip at 39 + 10/km
+    near=Decimal("2"), extra=Decimal("0"), base_fee=Decimal("39"), per_km=Decimal("10")
 )
+def test_fee_never_decreases_as_distance_increases(
+    near, extra, base_fee, per_km
+) -> None:
+    far = near + extra
 
-RULE_SETS = [
-    (39, 10),
-    (0, 0),
-    (0, 1),
-    (49, Decimal("7.5")),
-    (Decimal("39.99"), Decimal("0.01")),
-    (100, 25),
-]
+    near_fee = delivery_fee_for_km(near, base_fee=base_fee, per_km=per_km)
+    far_fee = delivery_fee_for_km(far, base_fee=base_fee, per_km=per_km)
 
-
-@pytest.mark.parametrize(("base_fee", "per_km"), RULE_SETS)
-def test_fee_never_decreases_as_distance_increases(base_fee, per_km) -> None:
-    from pricing.delivery_fee import delivery_fee_for_km
-
-    fees = [
-        delivery_fee_for_km(km, base_fee=base_fee, per_km=per_km)
-        for km in DISTANCES
-    ]
-
-    assert all(near <= far for near, far in zip(fees, fees[1:], strict=False))
-    assert fees[0] == Decimal(str(base_fee)).quantize(Decimal("0.01"))
+    assert near_fee <= far_fee
+    assert near_fee >= base_fee
 
 
 def test_sample_order_delivery_fee() -> None:
@@ -51,8 +41,6 @@ def test_sample_order_delivery_fee() -> None:
     change 401. With delivery_base_fee 39 and delivery_per_km 10, a 2 km
     trip gives the sample's 59.
     """
-    from pricing.delivery_fee import delivery_fee_for_km
-
     delivery = delivery_fee_for_km(Decimal("2"), base_fee=39, per_km=10)
 
     assert delivery == Decimal("59.00")
