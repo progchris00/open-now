@@ -51,6 +51,10 @@ jobs:
           uv run --project backend pytest backend/core/tests
           --cov=backend/core --cov=.github/workflows/scripts
           --cov-branch --cov-fail-under=80
+      - name: Run pricing tests with coverage
+        run: >-
+          uv run --project backend pytest backend/pricing/tests
+          --cov=backend/pricing --cov-branch --cov-fail-under=80
       - name: Show service logs after a failure
         if: failure()
         run: docker compose logs db redis

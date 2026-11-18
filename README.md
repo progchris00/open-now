@@ -27,6 +27,7 @@ Start the database first, then run the checks from the repository root:
 docker compose up -d db redis
 uv run --project backend ruff check backend
 uv run --project backend pytest --cov=backend/core --cov-branch --cov-fail-under=80
+uv run --project backend pytest backend/pricing/tests --cov=backend/pricing --cov-branch --cov-fail-under=80
 ```
 
 ## Run web checks
