@@ -46,6 +46,10 @@ jobs:
           backend .github/workflows/scripts
       - name: Check Django settings
         run: uv run --project backend python backend/manage.py check
+      - name: Run order limit tests with coverage
+        run: >-
+          uv run --project backend pytest backend/orders/tests
+          --cov=backend/orders --cov-branch --cov-fail-under=80
       - name: Run pytest and Schemathesis with coverage
         run: >-
           uv run --project backend pytest backend/core/tests
