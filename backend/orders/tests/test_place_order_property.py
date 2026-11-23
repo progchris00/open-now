@@ -3,9 +3,9 @@
     total  = items + delivery + fee - discount
     change = bill - total, and the bill picked must be at least the total
 
-The first two tests check the pure function the service uses. The last one
-goes through POST /api/orders and checks the stored row, so the endpoint,
-the serializer and the database constraints are covered too.
+The first tests check the pure function the service uses. The last one goes
+through place_order and checks the stored row, so the service and the
+database constraints are covered too.
 """
 
 from __future__ import annotations
@@ -154,13 +154,13 @@ def test_stored_order_satisfies_the_money_equations(
     migrated_database, prices, quantities, km, fee, extra
 ) -> None:
     from django.db import transaction
-    from rest_framework.test import APIClient
 
     from orders.models import Order, Product
+    from orders.services import CartLine, place_order
     from settings_store.cache import invalidate_settings_cache
     from settings_store.models import Setting
 
-    from .conftest import SAMPLE_SETTINGS, make_user
+    from .conftest import SAMPLE_SETTINGS, make_customer
 
     invalidate_settings_cache()
     with transaction.atomic():
@@ -173,7 +173,7 @@ def test_stored_order_satisfies_the_money_equations(
             for index, price in enumerate(prices)
         ]
         cart = [
-            {"product_id": product.pk, "quantity": quantity}
+            CartLine(product_id=product.pk, quantity=quantity)
             for product, quantity in zip(products, quantities, strict=False)
         ]
         items = sum(
@@ -187,22 +187,17 @@ def test_stored_order_satisfies_the_money_equations(
         expected_total = items + delivery + fee
         bill = expected_total + extra
 
-        client = APIClient()
-        client.force_authenticate(user=make_user(customer=True))
-        response = client.post(
-            "/api/orders",
-            {
-                "items": cart,
-                "distance_km": str(km),
-                "bill": str(bill),
-                "payment_method": "cod",
-            },
-            format="json",
-            headers={"Idempotency-Key": uuid4().hex},
+        placed, created = place_order(
+            customer=make_customer(),
+            lines=cart,
+            distance_km=km,
+            bill=bill,
+            payment_method="cod",
+            idempotency_key=uuid4().hex,
         )
 
-        assert response.status_code == 201, response.data
-        order = Order.objects.get(pk=response.data["id"])
+        assert created is True
+        order = Order.objects.get(pk=placed.pk)
         assert order.items_total == items
         assert (
             order.total

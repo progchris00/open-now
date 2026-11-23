@@ -16,7 +16,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.conf import settings
-from django.db import models
+from django.db import connection, models
 from django.db.models import F, Q
 
 MONEY = {"max_digits": 10, "decimal_places": 2}
@@ -25,6 +25,9 @@ MONEY = {"max_digits": 10, "decimal_places": 2}
 MAX_PESOS = Decimal(10) ** (MONEY["max_digits"] - MONEY["decimal_places"]) - (
     Decimal(1).scaleb(-MONEY["decimal_places"])
 )
+# The largest OrderItem.quantity the database stores (2,147,483,647 on PostgreSQL).
+MAX_QUANTITY = connection.ops.integer_field_range("PositiveIntegerField")[1]
+IDEMPOTENCY_KEY_MAX_LENGTH = 100
 
 
 class Product(models.Model):
@@ -75,7 +78,7 @@ class Order(models.Model):
     bill = models.DecimalField(**MONEY)
     change = models.DecimalField(**MONEY)
 
-    idempotency_key = models.CharField(max_length=100)
+    idempotency_key = models.CharField(max_length=IDEMPOTENCY_KEY_MAX_LENGTH)
     request_fingerprint = models.CharField(max_length=64)
 
     created_at = models.DateTimeField(auto_now_add=True)

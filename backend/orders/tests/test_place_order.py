@@ -1,4 +1,8 @@
-"""POST /api/orders: a customer places a cash-on-delivery order (S2-12.1)."""
+"""place_order: a customer's cash-on-delivery order is placed (S2-12.1).
+
+The HTTP endpoint, POST /api/orders, comes with S2-11, once the delivery
+distance can come from checked delivery details instead of the request.
+"""
 
 from __future__ import annotations
 
@@ -7,20 +11,27 @@ from uuid import uuid4
 
 import pytest
 
-from .conftest import make_user
+from .conftest import make_customer
+
+
+def refused(place, field: str, **overrides) -> None:
+    from orders.services import PlacementError
+
+    with pytest.raises(PlacementError) as raised:
+        place(**overrides)
+    assert raised.value.field == field
+
 
 # --- The card's tests ---------------------------------------------------------
 
 
-def test_place_order_creates_new_status(place, sample_request, customer) -> None:
+def test_place_order_creates_new_status(place, customer) -> None:
     from audit.models import AuditLog
     from orders.models import Order
 
-    response = place(sample_request)
+    order, created = place()
 
-    assert response.status_code == 201, response.data
-    order = Order.objects.get(pk=response.data["id"])
-    assert response.data["status"] == "new"
+    assert created is True
     assert order.status == Order.Status.NEW
     assert order.customer == customer
 
@@ -39,149 +50,102 @@ def test_place_order_creates_new_status(place, sample_request, customer) -> None
     assert entry.after["change"] == "401.00"
 
 
-def test_sample_order_totals(place, sample_request) -> None:
-    response = place(sample_request)
+def test_sample_order_totals(place) -> None:
+    order, _ = place()
+    order.refresh_from_db()
 
-    assert response.status_code == 201, response.data
-    assert response.data["items_total"] == "535.00"
-    assert response.data["delivery_fee"] == "59.00"
-    assert response.data["service_fee"] == "5.00"
-    assert response.data["discount"] == "0.00"
-    assert response.data["total"] == "599.00"
-
-
-def test_change_from_bill(place, sample_request) -> None:
-    response = place(sample_request)
-
-    assert response.status_code == 201, response.data
-    assert response.data["bill"] == "1000.00"
-    assert response.data["change"] == "401.00"
+    assert order.items_total == Decimal("535.00")
+    assert order.delivery_fee == Decimal("59.00")
+    assert order.service_fee == Decimal("5.00")
+    assert order.discount == Decimal("0.00")
+    assert order.total == Decimal("599.00")
 
 
-def test_bill_below_total_rejected(new_orders, place, sample_request) -> None:
-    response = place({**sample_request, "bill": "598.99"})
+def test_change_from_bill(place) -> None:
+    order, _ = place()
+    order.refresh_from_db()
 
-    assert response.status_code == 400
-    assert "bill" in response.data
+    assert order.bill == Decimal("1000.00")
+    assert order.change == Decimal("401.00")
+
+
+def test_bill_below_total_rejected(new_orders, place) -> None:
+    refused(place, "bill", bill=Decimal("598.99"))
+
     assert new_orders() == 0
 
 
-def test_bill_equal_to_total_is_accepted(place, sample_request) -> None:
-    response = place({**sample_request, "bill": "599.00"})
+def test_bill_equal_to_total_is_accepted(place) -> None:
+    order, _ = place(bill=Decimal("599.00"))
 
-    assert response.status_code == 201, response.data
-    assert response.data["change"] == "0.00"
+    assert order.change == Decimal("0.00")
 
 
-@pytest.mark.parametrize("method", ["gcash", "card", "COD", "", None])
-def test_only_cod_accepted(new_orders, place, sample_request, method) -> None:
-    response = place({**sample_request, "payment_method": method})
+@pytest.mark.parametrize("method", ["gcash", "card", "COD", ""])
+def test_only_cod_accepted(new_orders, place, method) -> None:
+    refused(place, "payment_method", payment_method=method)
 
-    assert response.status_code == 400
-    assert "payment_method" in response.data
     assert new_orders() == 0
 
 
-def test_missing_payment_method_rejected(place, sample_request) -> None:
-    body = {
-        key: value for key, value in sample_request.items() if key != "payment_method"
-    }
+def test_payment_method_read_from_settings(place, set_settings) -> None:
+    """The accepted method is the payment_method setting, not a literal."""
+    set_settings(payment_method="none")
 
-    response = place(body)
-
-    assert response.status_code == 400
-    assert "payment_method" in response.data
+    refused(place, "payment_method")
 
 
-# --- The server works the money out itself --------------------------------------
+# --- The money comes from the server --------------------------------------------
 
 
-def test_client_sent_prices_are_ignored(place, sample_request) -> None:
-    body = {
-        **sample_request,
-        "items": [{**line, "unit_price": "1.00"} for line in sample_request["items"]],
-        "total": "1.00",
-        "delivery_fee": "0.00",
-        "service_fee": "0.00",
-        "change": "999.00",
-    }
+def test_prices_come_from_the_products(place, menu) -> None:
+    order, _ = place()
 
-    response = place(body)
-
-    assert response.status_code == 201, response.data
-    assert response.data["total"] == "599.00"
-    assert response.data["change"] == "401.00"
-
-
-def test_order_items_store_name_price_and_line_total(place, sample_request) -> None:
-    response = place(sample_request)
-
-    assert response.status_code == 201, response.data
-    lines = sorted(response.data["items"], key=lambda line: line["name"])
+    lines = sorted(order.items.all(), key=lambda line: line.name)
     assert [
-        (line["name"], line["unit_price"], line["quantity"], line["line_total"])
-        for line in lines
+        (line.name, line.unit_price, line.quantity, line.line_total) for line in lines
     ] == [
-        ("Chicken adobo", "250.00", 1, "250.00"),
-        ("Garlic rice", "95.00", 3, "285.00"),
+        ("Chicken adobo", Decimal("250.00"), 1, Decimal("250.00")),
+        ("Garlic rice", Decimal("95.00"), 3, Decimal("285.00")),
     ]
 
 
-def test_service_fee_read_from_settings(place, sample_request, set_settings) -> None:
+def test_service_fee_read_from_settings(place, set_settings) -> None:
     set_settings(service_fee_per_order=7.5)
 
-    response = place(sample_request)
+    order, _ = place()
 
-    assert response.status_code == 201, response.data
-    assert response.data["service_fee"] == "7.50"
-    assert response.data["total"] == "601.50"
-    assert response.data["change"] == "398.50"
+    assert order.service_fee == Decimal("7.50")
+    assert order.total == Decimal("601.50")
+    assert order.change == Decimal("398.50")
 
 
-def test_delivery_fee_read_from_settings(place, sample_request, set_settings) -> None:
+def test_delivery_fee_read_from_settings(place, set_settings) -> None:
     set_settings(delivery_base_fee=20, delivery_per_km=15)
 
-    response = place(sample_request)
+    order, _ = place()
 
-    assert response.status_code == 201, response.data
-    assert response.data["delivery_fee"] == "50.00"
-    assert response.data["total"] == "590.00"
-
-
-def test_payment_method_read_from_settings(place, sample_request, set_settings) -> None:
-    """The accepted method is the payment_method setting, not a literal."""
-    from settings_store.cache import invalidate_settings_cache
-    from settings_store.models import Setting
-
-    Setting.objects.filter(key="payment_method").update(value="none")
-    invalidate_settings_cache()
-
-    response = place(sample_request)
-
-    assert response.status_code == 400
-    assert "payment_method" in response.data
+    assert order.delivery_fee == Decimal("50.00")
+    assert order.total == Decimal("590.00")
 
 
-def test_fee_and_prices_are_snapshotted(
-    place, sample_request, set_settings, menu
-) -> None:
+def test_fee_and_prices_are_snapshotted(place, set_settings, menu) -> None:
     from orders.models import Order
 
-    response = place(sample_request)
-    assert response.status_code == 201, response.data
+    placed, _ = place()
 
     set_settings(service_fee_per_order=50, delivery_base_fee=100)
     menu["adobo"].price = Decimal("999.00")
     menu["adobo"].save()
 
-    order = Order.objects.get(pk=response.data["id"])
+    order = Order.objects.get(pk=placed.pk)
     assert order.service_fee == Decimal("5.00")
     assert order.delivery_fee == Decimal("59.00")
     assert order.total == Decimal("599.00")
     assert order.items.get(product=menu["adobo"]).unit_price == Decimal("250.00")
 
 
-def test_money_is_decimal_end_to_end(place, sample_request) -> None:
+def test_money_columns_are_decimal_pesos() -> None:
     from django.db import models
 
     from orders.models import Order, OrderItem
@@ -206,216 +170,154 @@ def test_money_is_decimal_end_to_end(place, sample_request) -> None:
             assert isinstance(field, models.DecimalField), name
             assert field.decimal_places == 2, name
 
-    response = place(sample_request)
-    for name in [
-        "items_total",
-        "delivery_fee",
-        "service_fee",
-        "total",
-        "bill",
-        "change",
-    ]:
-        assert isinstance(response.data[name], str), name
+
+def test_there_is_no_order_endpoint_yet(migrated_database) -> None:
+    """POST /api/orders waits for S2-11, so the distance can't be sent by the
+    customer (review on #20)."""
+    from django.urls import Resolver404, resolve
+
+    with pytest.raises(Resolver404):
+        resolve("/api/orders")
 
 
 # --- Bad carts --------------------------------------------------------------------
 
 
-def test_empty_cart_rejected(place, sample_request) -> None:
-    response = place({**sample_request, "items": []})
-
-    assert response.status_code == 400
-    assert "items" in response.data
+def test_empty_cart_rejected(place) -> None:
+    refused(place, "items", lines=[])
 
 
-def test_unknown_product_rejected(new_orders, place, sample_request) -> None:
-    body = {**sample_request, "items": [{"product_id": 987654321, "quantity": 1}]}
+def test_unknown_product_rejected(new_orders, place) -> None:
+    from orders.services import CartLine
 
-    response = place(body)
+    refused(place, "items", lines=[CartLine(product_id=987654321, quantity=1)])
 
-    assert response.status_code == 400
-    assert "items" in response.data
     assert new_orders() == 0
 
 
 @pytest.mark.parametrize("quantity", [0, -1])
-def test_quantity_must_be_positive(place, sample_request, quantity) -> None:
-    line = {**sample_request["items"][0], "quantity": quantity}
+def test_quantity_must_be_positive(place, menu, quantity) -> None:
+    from orders.services import CartLine
 
-    response = place({**sample_request, "items": [line]})
-
-    assert response.status_code == 400
+    refused(place, "items", lines=[CartLine(menu["adobo"].pk, quantity)])
 
 
-def test_order_too_large_for_the_money_columns_is_400(
-    new_orders, place, sample_request
+def test_order_too_large_for_the_money_columns_is_refused(
+    new_orders, place, menu
 ) -> None:
     """₱250 x 1,000,000 = ₱250,000,000.00, more than a money column holds."""
-    line = {**sample_request["items"][0], "quantity": 1_000_000}
+    from orders.services import CartLine
 
-    response = place({**sample_request, "items": [line]})
+    refused(place, "items", lines=[CartLine(menu["adobo"].pk, 1_000_000)])
 
-    assert response.status_code == 400
-    assert "items" in response.data
     assert new_orders() == 0
 
 
-def test_largest_order_that_fits_is_accepted(
-    new_orders, place, sample_request, menu
-) -> None:
+def test_largest_order_that_fits_is_accepted(place, menu) -> None:
     """₱95 x 1,052,000 = ₱99,940,000 of items, just under the column limit."""
-    line = {"product_id": menu["rice"].pk, "quantity": 1_052_000}
-    body = {**sample_request, "items": [line], "bill": "99999999.99"}
+    from orders.services import CartLine
 
-    response = place(body)
+    order, _ = place(
+        lines=[CartLine(menu["rice"].pk, 1_052_000)], bill=Decimal("99999999.99")
+    )
 
-    assert response.status_code == 201, response.data
-    assert response.data["items_total"] == "99940000.00"
-    assert new_orders() == 1
+    assert order.items_total == Decimal("99940000.00")
 
 
-def test_quantity_above_the_column_range_is_400(place, sample_request) -> None:
+def test_quantity_above_the_column_range_is_refused(place) -> None:
     """A ₱0.01 item keeps the money small, so only the quantity overflows."""
     from django.db import connection
 
     from orders.models import Product
+    from orders.services import CartLine
 
     _, largest = connection.ops.integer_field_range("PositiveIntegerField")
     cheap = Product.objects.create(shop_id=1, name="Candy", price=Decimal("0.01"))
-    line = {"product_id": cheap.pk, "quantity": largest + 1}
 
-    response = place({**sample_request, "items": [line], "bill": "99999999.99"})
-
-    assert response.status_code == 400
-    assert "items" in response.data
-
-
-def test_delivery_fee_too_large_is_400(place, sample_request, set_settings) -> None:
-    set_settings(delivery_per_km=99_999)
-
-    response = place(
-        {**sample_request, "distance_km": "9999.999", "bill": "99999999.99"}
+    refused(
+        place,
+        "items",
+        lines=[CartLine(cheap.pk, largest + 1)],
+        bill=Decimal("99999999.99"),
     )
 
-    assert response.status_code == 400
-    assert "distance_km" in response.data
+
+def test_delivery_fee_too_large_is_refused(place, set_settings) -> None:
+    set_settings(delivery_per_km=99_999)
+
+    refused(
+        place,
+        "distance_km",
+        distance_km=Decimal("9999.999"),
+        bill=Decimal("99999999.99"),
+    )
 
 
-def test_same_product_twice_rejected(place, sample_request) -> None:
-    line = sample_request["items"][0]
+def test_same_product_twice_rejected(place, menu) -> None:
+    from orders.services import CartLine
 
-    response = place({**sample_request, "items": [line, line]})
+    line = CartLine(menu["adobo"].pk, 1)
 
-    assert response.status_code == 400
-    assert "items" in response.data
+    refused(place, "items", lines=[line, line])
 
 
-def test_items_from_two_shops_rejected(place, sample_request, menu) -> None:
+def test_items_from_two_shops_rejected(place, sample_order) -> None:
     from orders.models import Product
+    from orders.services import CartLine
 
     other = Product.objects.create(shop_id=2, name="Halo-halo", price=Decimal("80.00"))
-    body = {
-        **sample_request,
-        "items": [*sample_request["items"], {"product_id": other.pk, "quantity": 1}],
-    }
 
-    response = place(body)
-
-    assert response.status_code == 400
-    assert "items" in response.data
+    refused(place, "items", lines=[*sample_order["lines"], CartLine(other.pk, 1)])
 
 
-def test_negative_distance_rejected(place, sample_request) -> None:
-    response = place({**sample_request, "distance_km": "-1"})
-
-    assert response.status_code == 400
-    assert "distance_km" in response.data
+def test_negative_distance_rejected(place) -> None:
+    refused(place, "distance_km", distance_km=Decimal("-1"))
 
 
-def test_order_records_the_shop(place, sample_request, menu) -> None:
-    response = place(sample_request)
+def test_order_records_the_shop(place, menu) -> None:
+    order, _ = place()
 
-    assert response.status_code == 201, response.data
-    assert response.data["shop_id"] == menu["adobo"].shop_id
-
-
-# --- Who may call it --------------------------------------------------------------
-
-
-def test_non_customer_gets_403(new_orders, place, sample_request) -> None:
-    from rest_framework.test import APIClient
-
-    client = APIClient()
-    client.force_authenticate(user=make_user(customer=False))
-
-    response = place(sample_request, client=client)
-
-    assert response.status_code == 403
-    assert new_orders() == 0
-
-
-def test_anonymous_gets_403(new_orders, place, sample_request) -> None:
-    from rest_framework.test import APIClient
-
-    response = place(sample_request, client=APIClient())
-
-    assert response.status_code == 403
-    assert new_orders() == 0
+    assert order.shop_id == menu["adobo"].shop_id
 
 
 # --- Placing twice ----------------------------------------------------------------
 
 
-def test_double_submit_creates_one_order(new_orders, place, sample_request) -> None:
+def test_double_submit_creates_one_order(new_orders, place) -> None:
     key = uuid4().hex
 
-    first = place(sample_request, key=key)
-    second = place(sample_request, key=key)
+    first, first_created = place(idempotency_key=key)
+    second, second_created = place(idempotency_key=key)
 
-    assert first.status_code == 201, first.data
-    assert second.status_code == 200, second.data
-    assert second.data == first.data
+    assert (first_created, second_created) == (True, False)
+    assert second.pk == first.pk
     assert new_orders() == 1
 
 
-def test_same_key_with_a_different_order_is_409(
-    new_orders, place, sample_request
-) -> None:
+def test_same_key_with_a_different_order_is_refused(new_orders, place) -> None:
+    from orders.services import KeyReused
+
     key = uuid4().hex
+    place(idempotency_key=key)
 
-    first = place(sample_request, key=key)
-    second = place({**sample_request, "bill": "600.00"}, key=key)
+    with pytest.raises(KeyReused):
+        place(idempotency_key=key, bill=Decimal("600.00"))
 
-    assert first.status_code == 201, first.data
-    assert second.status_code == 409
     assert new_orders() == 1
 
 
-def test_idempotency_key_is_per_customer(place, sample_request) -> None:
-    from rest_framework.test import APIClient
-
-    other = APIClient()
-    other.force_authenticate(user=make_user(customer=True))
+def test_idempotency_key_is_per_customer(place) -> None:
     key = uuid4().hex
 
-    first = place(sample_request, key=key)
-    second = place(sample_request, key=key, client=other)
+    first, _ = place(idempotency_key=key)
+    second, created = place(idempotency_key=key, customer=make_customer())
 
-    assert first.status_code == 201, first.data
-    assert second.status_code == 201, second.data
-    assert first.data["id"] != second.data["id"]
+    assert created is True
+    assert first.pk != second.pk
 
 
-@pytest.mark.parametrize("key", [None, "", "x" * 101])
-def test_idempotency_key_required_and_bounded(
-    new_orders, customer_client, sample_request, key
-) -> None:
-    headers = {} if key is None else {"Idempotency-Key": key}
+@pytest.mark.parametrize("key", ["", "x" * 101])
+def test_idempotency_key_must_fit(new_orders, place, key) -> None:
+    refused(place, "idempotency_key", idempotency_key=key)
 
-    response = customer_client.post(
-        "/api/orders", sample_request, format="json", headers=headers
-    )
-
-    assert response.status_code == 400
-    assert "idempotency_key" in response.data
     assert new_orders() == 0

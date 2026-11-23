@@ -30,7 +30,15 @@ from pricing.delivery_fee import delivery_fee_for_km
 from settings_store.cache import get_setting
 
 from .cash import change_due, order_total, to_peso
-from .models import MAX_PESOS, Order, OrderItem, OrderStatusHistory, Product
+from .models import (
+    IDEMPOTENCY_KEY_MAX_LENGTH,
+    MAX_PESOS,
+    MAX_QUANTITY,
+    Order,
+    OrderItem,
+    OrderStatusHistory,
+    Product,
+)
 
 
 class PlacementError(ValueError):
@@ -92,8 +100,6 @@ def price_order(
     """
     line_totals = tuple(to_peso(price * quantity) for price, quantity in lines)
     items_total = sum(line_totals, Decimal("0"))
-    if items_total > MAX_PESOS:
-        raise OrderTooLarge(f"Orders can't be more than ₱{MAX_PESOS:,.2f}.")
     if to_peso(delivery_fee) > MAX_PESOS:
         raise OrderTooLarge(
             "The delivery fee for this distance is too large.", field="distance_km"
@@ -158,6 +164,10 @@ def _load_products(lines: Sequence[CartLine]) -> list[Product]:
         raise PlacementError("Each product can only be listed once.", field="items")
     if any(line.quantity <= 0 for line in lines):
         raise PlacementError("Quantities must be at least 1.", field="items")
+    if any(line.quantity > MAX_QUANTITY for line in lines):
+        raise PlacementError(
+            f"Quantities can't be more than {MAX_QUANTITY:,}.", field="items"
+        )
 
     products = Product.objects.in_bulk(ids)
     missing = [product_id for product_id in ids if product_id not in products]
@@ -182,10 +192,21 @@ def place_order(
 ) -> tuple[Order, bool]:
     """Place the order. Returns (order, created).
 
+    Trusted callers only. distance_km sets the delivery fee, so it must come
+    from delivery details the server has checked (S2-11), never straight from
+    a request. That's why there is no HTTP endpoint yet: POST /api/orders is
+    added with S2-11, along with its permission check.
+
     created is False when the same request was already placed with this key.
     Raises PlacementError for a bad request and KeyReused for a key that was
     used for a different order.
     """
+    if not 1 <= len(idempotency_key) <= IDEMPOTENCY_KEY_MAX_LENGTH:
+        raise PlacementError(
+            f"The idempotency key must be 1 to {IDEMPOTENCY_KEY_MAX_LENGTH} "
+            "characters.",
+            field="idempotency_key",
+        )
     request_fingerprint = fingerprint(
         lines=lines,
         distance_km=distance_km,

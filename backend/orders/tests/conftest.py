@@ -7,7 +7,6 @@ settings cache is cleared before and after so no test value leaks out.
 
 from __future__ import annotations
 
-import base64
 import os
 import sys
 from decimal import Decimal
@@ -28,7 +27,6 @@ SAMPLE_SETTINGS = {
     "accept_minutes": 5,
 }
 SAMPLE_DISTANCE_KM = "2"
-PASSWORD = "test-password"
 
 
 def configure_django() -> None:
@@ -92,39 +90,15 @@ def set_settings(rollback):
     return apply
 
 
-def make_user(*, customer: bool):
+def make_customer():
     from django.contrib.auth import get_user_model
-    from django.contrib.auth.models import Group
 
-    from orders.permissions import CUSTOMER_GROUP
-
-    user = get_user_model().objects.create_user(
-        username=f"order-test-{uuid4().hex}",
-        password=PASSWORD,
-    )
-    if customer:
-        group, _ = Group.objects.get_or_create(name=CUSTOMER_GROUP)
-        user.groups.add(group)
-    return user
-
-
-def basic_auth(user) -> str:
-    token = base64.b64encode(f"{user.username}:{PASSWORD}".encode()).decode()
-    return f"Basic {token}"
+    return get_user_model().objects.create_user(username=f"order-test-{uuid4().hex}")
 
 
 @pytest.fixture
 def customer(set_settings):
-    return make_user(customer=True)
-
-
-@pytest.fixture
-def customer_client(customer):
-    from rest_framework.test import APIClient
-
-    client = APIClient()
-    client.force_authenticate(user=customer)
-    return client
+    return make_customer()
 
 
 @pytest.fixture
@@ -144,29 +118,34 @@ def menu(set_settings):
 
 
 @pytest.fixture
-def sample_request(menu):
-    """The workflow's sample order: 535 items, 59 delivery, 5 fee, 1000 bill."""
+def sample_order(customer, menu):
+    """The workflow's sample order: 535 items, 59 delivery, 5 fee, 1000 bill.
+
+    These are place_order's arguments, without the idempotency key.
+    """
+    from orders.services import CartLine
+
     return {
-        "items": [
-            {"product_id": menu["adobo"].pk, "quantity": 1},
-            {"product_id": menu["rice"].pk, "quantity": 3},
+        "customer": customer,
+        "lines": [
+            CartLine(product_id=menu["adobo"].pk, quantity=1),
+            CartLine(product_id=menu["rice"].pk, quantity=3),
         ],
-        "distance_km": SAMPLE_DISTANCE_KM,
-        "bill": "1000.00",
+        "distance_km": Decimal(SAMPLE_DISTANCE_KM),
+        "bill": Decimal("1000.00"),
         "payment_method": "cod",
     }
 
 
 @pytest.fixture
-def place(customer_client):
-    """POST /api/orders with a fresh Idempotency-Key unless one is given."""
+def place(sample_order):
+    """Place the sample order, changed by any keyword given. Returns
+    (order, created). A fresh idempotency key is used unless one is given."""
+    from orders.services import place_order
 
-    def post(body, *, key: str | None = None, client=None):
-        return (client or customer_client).post(
-            "/api/orders",
-            body,
-            format="json",
-            headers={"Idempotency-Key": key or uuid4().hex},
+    def call(**overrides):
+        return place_order(
+            **{**sample_order, "idempotency_key": uuid4().hex, **overrides}
         )
 
-    return post
+    return call

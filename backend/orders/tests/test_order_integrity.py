@@ -129,10 +129,10 @@ def test_database_refuses_zero_quantity(customer, menu) -> None:
         )
 
 
-def test_products_with_orders_cannot_be_deleted(place, sample_request, menu) -> None:
+def test_products_with_orders_cannot_be_deleted(place, menu) -> None:
     from django.db.models import ProtectedError
 
-    assert place(sample_request).status_code == 201
+    place()
 
     with pytest.raises(ProtectedError):
         menu["adobo"].delete()
@@ -216,10 +216,10 @@ def test_other_integrity_errors_are_not_swallowed(customer, menu, monkeypatch) -
         place_sample(customer, menu)
 
 
-def test_models_describe_themselves(place, sample_request) -> None:
+def test_models_describe_themselves(place) -> None:
     from orders.models import Order
 
-    order = Order.objects.get(pk=place(sample_request).data["id"])
+    order = Order.objects.get(pk=place()[0].pk)
 
     assert str(order) == f"Order {order.pk} (new)"
     assert str(order.items.get(name="Garlic rice")) == "3 x Garlic rice"
