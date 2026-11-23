@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "pricing.apps.PricingConfig",
     "audit.apps.AuditConfig",
     "orders.apps.OrdersConfig",
+    "sms.apps.SmsConfig",
 ]
 
 MIDDLEWARE = [
@@ -108,3 +109,6 @@ CELERY_RESULT_BACKEND = os.getenv(
     "CELERY_RESULT_BACKEND",
     CELERY_BROKER_URL,
 )
+
+SEMAPHORE_API_KEY = os.getenv("SEMAPHORE_API_KEY", "")
+SEMAPHORE_SENDER_NAME = os.getenv("SEMAPHORE_SENDER_NAME", "")
