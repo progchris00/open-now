@@ -107,6 +107,10 @@ def price_order(
     total = order_total(items_total, delivery_fee, service_fee, discount=discount)
     if total > MAX_PESOS:
         raise OrderTooLarge(f"Orders can't be more than ₱{MAX_PESOS:,.2f}.")
+    if to_peso(bill) > MAX_PESOS:
+        raise OrderTooLarge(
+            f"The bill can't be more than ₱{MAX_PESOS:,.2f}.", field="bill"
+        )
     try:
         change = change_due(bill=bill, total=total)
     except ValueError as error:

@@ -224,6 +224,12 @@ def test_largest_order_that_fits_is_accepted(place, menu) -> None:
     assert order.items_total == Decimal("99940000.00")
 
 
+def test_bill_too_large_for_the_money_columns_is_refused(new_orders, place) -> None:
+    refused(place, "bill", bill=Decimal("100000000.00"))
+
+    assert new_orders() == 0
+
+
 def test_quantity_above_the_column_range_is_refused(place) -> None:
     """A ₱0.01 item keeps the money small, so only the quantity overflows."""
     from django.db import connection
