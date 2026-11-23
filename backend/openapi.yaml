@@ -100,6 +100,54 @@ paths:
                   $ref: "#/components/schemas/AuditLog"
         "403":
           description: User is not an administrator
+  /api/admin/orders/{id}/cash:
+    get:
+      operationId: getAdminOrderCash
+      summary: List the append-only cash ledger for an order
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Cash records and balances for the order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderCash"
+        "403":
+          description: User is not an administrator
+        "404":
+          description: Order does not exist
+  /api/admin/cash/corrections:
+    post:
+      operationId: createAdminCashCorrection
+      summary: Add a correcting cash line without editing an existing line
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CashCorrectionRequest"
+      responses:
+        "201":
+          description: Correcting cash line created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashRecord"
+        "400":
+          description: Invalid correction
+        "403":
+          description: User is not an administrator
 components:
   securitySchemes:
     sessionAuth:
@@ -200,3 +248,76 @@ components:
         when:
           type: string
           format: date-time
+    CashParty:
+      type: string
+      enum: [customer, rider, shop, platform, coordinator]
+    CashRecordType:
+      type: string
+      enum: [customer_payment, change, shop_payout, delivery_payment, correction]
+    CashRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - order
+        - type
+        - amount
+        - from
+        - to
+        - created_by
+        - reason
+        - created_at
+      properties:
+        id:
+          type: integer
+        order:
+          type: integer
+        type:
+          $ref: "#/components/schemas/CashRecordType"
+        amount:
+          type: string
+          pattern: "^[0-9]+\\.[0-9]{2}$"
+        from:
+          $ref: "#/components/schemas/CashParty"
+        to:
+          $ref: "#/components/schemas/CashParty"
+        created_by:
+          type: [integer, "null"]
+        reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    OrderCash:
+      type: object
+      additionalProperties: false
+      required: [order, records, balances]
+      properties:
+        order:
+          type: integer
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/CashRecord"
+        balances:
+          type: object
+          additionalProperties:
+            type: string
+            pattern: "^-?[0-9]+\\.[0-9]{2}$"
+    CashCorrectionRequest:
+      type: object
+      additionalProperties: false
+      required: [order, amount, from, to, reason]
+      properties:
+        order:
+          type: integer
+        amount:
+          type: string
+          pattern: "^[0-9]+\\.[0-9]{2}$"
+        from:
+          $ref: "#/components/schemas/CashParty"
+        to:
+          $ref: "#/components/schemas/CashParty"
+        reason:
+          type: string
+          minLength: 1

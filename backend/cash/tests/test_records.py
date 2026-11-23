@@ -133,9 +133,8 @@ def test_records_immutable(order, admin_and_clients) -> None:
 
 def test_correction_adds_line(order, admin_and_clients) -> None:
     require_cash_module("cash.models")
-    from cash.models import CashRecord
-
     from audit.models import AuditLog
+    from cash.models import CashRecord
 
     admin, admin_client, regular_client = admin_and_clients
     original = add_cash(
@@ -154,14 +153,34 @@ def test_correction_adds_line(order, admin_and_clients) -> None:
         "reason": "Shop payout was entered ten pesos too high.",
     }
 
-    assert regular_client.post(
-        "/api/admin/cash/corrections", payload, format="json"
-    ).status_code == 403
-    response = admin_client.post(
-        "/api/admin/cash/corrections", payload, format="json"
+    assert (
+        regular_client.post(
+            "/api/admin/cash/corrections", payload, format="json"
+        ).status_code
+        == 403
     )
+    assert (
+        admin_client.post(
+            "/api/admin/cash/corrections",
+            {**payload, "reason": "   "},
+            format="json",
+        ).status_code
+        == 400
+    )
+    assert (
+        admin_client.post(
+            "/api/admin/cash/corrections",
+            {**payload, "to": "shop"},
+            format="json",
+        ).status_code
+        == 400
+    )
+    assert CashRecord.objects.filter(order=order).count() == 1
+    response = admin_client.post("/api/admin/cash/corrections", payload, format="json")
 
     assert response.status_code == 201
+    assert response.data["from"] == "shop"
+    assert response.data["to"] == "rider"
     original.refresh_from_db()
     assert original.amount == Decimal("550.00")
     correction = CashRecord.objects.get(pk=response.data["id"])
@@ -199,6 +218,7 @@ def test_order_cash_sums(order, admin_and_clients) -> None:
 
     path = f"/api/admin/orders/{order.pk}/cash"
     assert regular_client.get(path).status_code == 403
+    assert admin_client.get("/api/admin/orders/999999999/cash").status_code == 404
     response = admin_client.get(path)
 
     assert response.status_code == 200
@@ -210,6 +230,17 @@ def test_order_cash_sums(order, admin_and_clients) -> None:
     }
     assert sum(Decimal(value) for value in response.data["balances"].values()) == 0
     assert len(response.data["records"]) == 3
+    assert response.data["records"][0] == {
+        "id": response.data["records"][0]["id"],
+        "order": order.pk,
+        "type": "customer_payment",
+        "amount": "1000.00",
+        "created_by": admin.pk,
+        "reason": "",
+        "created_at": response.data["records"][0]["created_at"],
+        "from": "customer",
+        "to": "rider",
+    }
 
 
 def test_cash_endpoints_match_openapi_contract(migrated_database) -> None:
@@ -224,7 +255,8 @@ def test_cash_endpoints_match_openapi_contract(migrated_database) -> None:
     get_case = schema["/api/admin/orders/{id}/cash"]["GET"].Case(
         path_parameters={"id": 1}
     )
-    assert get_case.call().status_code in {200, 403, 404}
+    get_response = get_case.call_and_validate()
+    assert get_response.status_code in {200, 403, 404}
 
     post_case = schema["/api/admin/cash/corrections"]["POST"].Case(
         body={
@@ -234,5 +266,7 @@ def test_cash_endpoints_match_openapi_contract(migrated_database) -> None:
             "to": "rider",
             "reason": "Correct an earlier cash line.",
         },
+        media_type="application/json",
     )
-    assert post_case.call().status_code in {201, 400, 403, 404}
+    post_response = post_case.call_and_validate()
+    assert post_response.status_code in {201, 400, 403, 404}

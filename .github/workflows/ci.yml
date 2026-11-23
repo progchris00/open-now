@@ -67,6 +67,10 @@ jobs:
         run: >-
           uv run --project backend pytest backend/sms/tests
           --cov=backend/sms --cov-branch --cov-fail-under=80
+      - name: Run cash tests with coverage
+        run: >-
+          uv run --project backend pytest backend/cash/tests
+          --cov=backend/cash --cov-branch --cov-fail-under=80
       - name: Enforce audit package coverage
         run: >-
           uv run --project backend pytest backend/audit/tests

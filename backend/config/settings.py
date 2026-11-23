@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "audit.apps.AuditConfig",
     "orders.apps.OrdersConfig",
     "sms.apps.SmsConfig",
+    "cash.apps.CashConfig",
 ]
 
 MIDDLEWARE = [

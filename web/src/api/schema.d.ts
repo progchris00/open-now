@@ -72,6 +72,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/orders/{id}/cash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the append-only cash ledger for an order */
+        get: operations["getAdminOrderCash"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/cash/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a correcting cash line without editing an existing line */
+        post: operations["createAdminCashCorrection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -113,6 +147,36 @@ export interface components {
             after: unknown;
             /** Format: date-time */
             when: string;
+        };
+        /** @enum {string} */
+        CashParty: "customer" | "rider" | "shop" | "platform" | "coordinator";
+        /** @enum {string} */
+        CashRecordType: "customer_payment" | "change" | "shop_payout" | "delivery_payment" | "correction";
+        CashRecord: {
+            id: number;
+            order: number;
+            type: components["schemas"]["CashRecordType"];
+            amount: string;
+            from: components["schemas"]["CashParty"];
+            to: components["schemas"]["CashParty"];
+            created_by: number | null;
+            reason: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        OrderCash: {
+            order: number;
+            records: components["schemas"]["CashRecord"][];
+            balances: {
+                [key: string]: string;
+            };
+        };
+        CashCorrectionRequest: {
+            order: number;
+            amount: string;
+            from: components["schemas"]["CashParty"];
+            to: components["schemas"]["CashParty"];
+            reason: string;
         };
     };
     responses: never;
@@ -246,6 +310,80 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AuditLog"][];
                 };
+            };
+            /** @description User is not an administrator */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getAdminOrderCash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cash records and balances for the order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderCash"];
+                };
+            };
+            /** @description User is not an administrator */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Order does not exist */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createAdminCashCorrection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CashCorrectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Correcting cash line created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CashRecord"];
+                };
+            };
+            /** @description Invalid correction */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description User is not an administrator */
             403: {
