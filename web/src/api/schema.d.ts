@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Place a cash-on-delivery order */
+        post: operations["placeOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -113,6 +130,52 @@ export interface components {
             after: unknown;
             /** Format: date-time */
             when: string;
+        };
+        /**
+         * Format: decimal
+         * @description A non-negative peso amount, such as "1000.00"
+         */
+        Pesos: string;
+        PlaceOrderLine: {
+            product_id: number;
+            quantity: number;
+        };
+        /** @description What the customer sends. Prices, fees and totals are never read from it; the server works them out. */
+        PlaceOrder: {
+            items: components["schemas"]["PlaceOrderLine"][];
+            /**
+             * Format: decimal
+             * @description TEMPORARY until S2-11 (delivery details): distance from the shop to the customer in km.
+             */
+            distance_km: string;
+            bill: components["schemas"]["Pesos"];
+            /** @enum {string} */
+            payment_method: "cod";
+        };
+        OrderItem: {
+            product_id: number;
+            name: string;
+            unit_price: components["schemas"]["Pesos"];
+            quantity: number;
+            line_total: components["schemas"]["Pesos"];
+        };
+        Order: {
+            id: number;
+            /** @enum {string} */
+            status: "new";
+            shop_id: number;
+            /** @enum {string} */
+            payment_method: "cod";
+            items: components["schemas"]["OrderItem"][];
+            items_total: components["schemas"]["Pesos"];
+            delivery_fee: components["schemas"]["Pesos"];
+            service_fee: components["schemas"]["Pesos"];
+            discount: components["schemas"]["Pesos"];
+            total: components["schemas"]["Pesos"];
+            bill: components["schemas"]["Pesos"];
+            change: components["schemas"]["Pesos"];
+            /** Format: date-time */
+            created_at: string;
         };
     };
     responses: never;
@@ -249,6 +312,63 @@ export interface operations {
             };
             /** @description User is not an administrator */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    placeOrder: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A new random value for each order. Retrying with the same key returns the first order. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaceOrder"];
+            };
+        };
+        responses: {
+            /** @description Already placed with this Idempotency-Key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order"];
+                };
+            };
+            /** @description Order placed with status New */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order"];
+                };
+            };
+            /** @description Invalid cart, bill below the total, or not cash */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in as a customer */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency-Key already used for a different order */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

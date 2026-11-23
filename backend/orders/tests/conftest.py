@@ -64,6 +64,19 @@ def rollback(migrated_database):
 
 
 @pytest.fixture
+def new_orders(rollback):
+    """How many orders this test created.
+
+    The development database can already hold real orders, so tests count
+    from where they started instead of assuming the table is empty.
+    """
+    from orders.models import Order
+
+    start = Order.objects.count()
+    return lambda: Order.objects.count() - start
+
+
+@pytest.fixture
 def set_settings(rollback):
     """Change admin settings for this test only. Starts from SAMPLE_SETTINGS."""
     from settings_store.cache import invalidate_settings_cache

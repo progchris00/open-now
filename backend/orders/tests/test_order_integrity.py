@@ -171,9 +171,60 @@ def test_audit_failure_leaves_no_order_behind(customer, menu, monkeypatch) -> No
     with pytest.raises(RuntimeError):
         place_sample(customer, menu)
 
-    assert Order.objects.count() == 0
-    assert OrderItem.objects.count() == 0
-    assert OrderStatusHistory.objects.count() == 0
+    assert not Order.objects.filter(customer=customer).exists()
+    assert not OrderItem.objects.filter(order__customer=customer).exists()
+    assert not OrderStatusHistory.objects.filter(order__customer=customer).exists()
+
+
+@pytest.mark.parametrize(
+    ("overrides", "field"),
+    [
+        pytest.param({"lines": []}, "items", id="empty-cart"),
+        pytest.param({"quantity": 0}, "items", id="zero-quantity"),
+        pytest.param(
+            {"distance_km": Decimal("-0.001")}, "distance_km", id="negative-km"
+        ),
+    ],
+)
+def test_service_checks_its_own_input(customer, menu, overrides, field) -> None:
+    """The service is safe to call without the serializer in front of it."""
+    from orders.services import CartLine, PlacementError
+
+    if "quantity" in overrides:
+        overrides = {
+            "lines": [CartLine(product_id=menu["adobo"].pk, quantity=0)],
+        }
+
+    with pytest.raises(PlacementError) as raised:
+        place_sample(customer, menu, **overrides)
+
+    assert raised.value.field == field
+
+
+def test_other_integrity_errors_are_not_swallowed(customer, menu, monkeypatch) -> None:
+    """Only a lost race on the key is turned into a replay."""
+    from django.db import IntegrityError
+
+    from orders import services
+
+    def failing_create(**kwargs):
+        raise IntegrityError("some other constraint")
+
+    monkeypatch.setattr(services, "_create", failing_create)
+
+    with pytest.raises(IntegrityError):
+        place_sample(customer, menu)
+
+
+def test_models_describe_themselves(place, sample_request) -> None:
+    from orders.models import Order
+
+    order = Order.objects.get(pk=place(sample_request).data["id"])
+
+    assert str(order) == f"Order {order.pk} (new)"
+    assert str(order.items.get(name="Garlic rice")) == "3 x Garlic rice"
+    assert str(order.items.first().product) == "Chicken adobo"
+    assert str(order.status_history.get()) == f"Order {order.pk} -> new"
 
 
 def test_service_returns_existing_order_on_replay(customer, menu) -> None:
@@ -263,6 +314,29 @@ def test_nothing_queued_when_the_order_rolls_back(customer, menu, monkeypatch) -
             place_sample(customer, menu)
 
     assert callbacks == []
+
+
+def test_broker_outage_does_not_fail_a_placed_order(
+    customer, menu, monkeypatch, caplog
+) -> None:
+    """The order is committed before the timer is queued, so a broker error
+    is logged rather than turned into a failed request."""
+    from django.test import TestCase
+
+    from orders import tasks
+    from orders.models import Order
+
+    def broker_down(**kwargs):
+        raise ConnectionError("redis is unreachable")
+
+    monkeypatch.setattr(tasks.accept_timer_expired, "apply_async", broker_down)
+
+    with TestCase.captureOnCommitCallbacks(execute=True):
+        order, created = place_sample(customer, menu)
+
+    assert created is True
+    assert Order.objects.filter(pk=order.pk).exists()
+    assert "redis is unreachable" in caplog.text
 
 
 def test_replay_does_not_queue_a_second_timer(customer, menu) -> None:

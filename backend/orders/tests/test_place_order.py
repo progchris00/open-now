@@ -9,13 +9,6 @@ import pytest
 
 from .conftest import make_user
 
-
-def order_count() -> int:
-    from orders.models import Order
-
-    return Order.objects.count()
-
-
 # --- The card's tests ---------------------------------------------------------
 
 
@@ -65,12 +58,12 @@ def test_change_from_bill(place, sample_request) -> None:
     assert response.data["change"] == "401.00"
 
 
-def test_bill_below_total_rejected(place, sample_request) -> None:
+def test_bill_below_total_rejected(new_orders, place, sample_request) -> None:
     response = place({**sample_request, "bill": "598.99"})
 
     assert response.status_code == 400
     assert "bill" in response.data
-    assert order_count() == 0
+    assert new_orders() == 0
 
 
 def test_bill_equal_to_total_is_accepted(place, sample_request) -> None:
@@ -81,12 +74,12 @@ def test_bill_equal_to_total_is_accepted(place, sample_request) -> None:
 
 
 @pytest.mark.parametrize("method", ["gcash", "card", "COD", "", None])
-def test_only_cod_accepted(place, sample_request, method) -> None:
+def test_only_cod_accepted(new_orders, place, sample_request, method) -> None:
     response = place({**sample_request, "payment_method": method})
 
     assert response.status_code == 400
     assert "payment_method" in response.data
-    assert order_count() == 0
+    assert new_orders() == 0
 
 
 def test_missing_payment_method_rejected(place, sample_request) -> None:
@@ -235,14 +228,14 @@ def test_empty_cart_rejected(place, sample_request) -> None:
     assert "items" in response.data
 
 
-def test_unknown_product_rejected(place, sample_request) -> None:
+def test_unknown_product_rejected(new_orders, place, sample_request) -> None:
     body = {**sample_request, "items": [{"product_id": 987654321, "quantity": 1}]}
 
     response = place(body)
 
     assert response.status_code == 400
     assert "items" in response.data
-    assert order_count() == 0
+    assert new_orders() == 0
 
 
 @pytest.mark.parametrize("quantity", [0, -1])
@@ -295,7 +288,7 @@ def test_order_records_the_shop(place, sample_request, menu) -> None:
 # --- Who may call it --------------------------------------------------------------
 
 
-def test_non_customer_gets_403(place, sample_request) -> None:
+def test_non_customer_gets_403(new_orders, place, sample_request) -> None:
     from rest_framework.test import APIClient
 
     client = APIClient()
@@ -304,22 +297,22 @@ def test_non_customer_gets_403(place, sample_request) -> None:
     response = place(sample_request, client=client)
 
     assert response.status_code == 403
-    assert order_count() == 0
+    assert new_orders() == 0
 
 
-def test_anonymous_gets_403(place, sample_request) -> None:
+def test_anonymous_gets_403(new_orders, place, sample_request) -> None:
     from rest_framework.test import APIClient
 
     response = place(sample_request, client=APIClient())
 
     assert response.status_code == 403
-    assert order_count() == 0
+    assert new_orders() == 0
 
 
 # --- Placing twice ----------------------------------------------------------------
 
 
-def test_double_submit_creates_one_order(place, sample_request) -> None:
+def test_double_submit_creates_one_order(new_orders, place, sample_request) -> None:
     key = uuid4().hex
 
     first = place(sample_request, key=key)
@@ -328,10 +321,12 @@ def test_double_submit_creates_one_order(place, sample_request) -> None:
     assert first.status_code == 201, first.data
     assert second.status_code == 200, second.data
     assert second.data == first.data
-    assert order_count() == 1
+    assert new_orders() == 1
 
 
-def test_same_key_with_a_different_order_is_409(place, sample_request) -> None:
+def test_same_key_with_a_different_order_is_409(
+    new_orders, place, sample_request
+) -> None:
     key = uuid4().hex
 
     first = place(sample_request, key=key)
@@ -339,7 +334,7 @@ def test_same_key_with_a_different_order_is_409(place, sample_request) -> None:
 
     assert first.status_code == 201, first.data
     assert second.status_code == 409
-    assert order_count() == 1
+    assert new_orders() == 1
 
 
 def test_idempotency_key_is_per_customer(place, sample_request) -> None:
@@ -359,7 +354,7 @@ def test_idempotency_key_is_per_customer(place, sample_request) -> None:
 
 @pytest.mark.parametrize("key", [None, "", "x" * 101])
 def test_idempotency_key_required_and_bounded(
-    customer_client, sample_request, key
+    new_orders, customer_client, sample_request, key
 ) -> None:
     headers = {} if key is None else {"Idempotency-Key": key}
 
@@ -369,4 +364,4 @@ def test_idempotency_key_required_and_bounded(
 
     assert response.status_code == 400
     assert "idempotency_key" in response.data
-    assert order_count() == 0
+    assert new_orders() == 0
