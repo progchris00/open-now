@@ -1,3 +1,4 @@
+from django.db import connection
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -27,7 +28,11 @@ class KilometreField(serializers.DecimalField):
 
 class PlaceOrderLineSerializer(serializers.Serializer):
     product_id = serializers.IntegerField(min_value=1)
-    quantity = serializers.IntegerField(min_value=1)
+    # As many as OrderItem.quantity can store (2,147,483,647 on PostgreSQL).
+    quantity = serializers.IntegerField(
+        min_value=1,
+        max_value=connection.ops.integer_field_range("PositiveIntegerField")[1],
+    )
 
 
 class PlaceOrderSerializer(serializers.Serializer):

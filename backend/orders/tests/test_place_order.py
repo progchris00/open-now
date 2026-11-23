@@ -247,6 +247,60 @@ def test_quantity_must_be_positive(place, sample_request, quantity) -> None:
     assert response.status_code == 400
 
 
+def test_order_too_large_for_the_money_columns_is_400(
+    new_orders, place, sample_request
+) -> None:
+    """₱250 x 1,000,000 = ₱250,000,000.00, more than a money column holds."""
+    line = {**sample_request["items"][0], "quantity": 1_000_000}
+
+    response = place({**sample_request, "items": [line]})
+
+    assert response.status_code == 400
+    assert "items" in response.data
+    assert new_orders() == 0
+
+
+def test_largest_order_that_fits_is_accepted(
+    new_orders, place, sample_request, menu
+) -> None:
+    """₱95 x 1,052,000 = ₱99,940,000 of items, just under the column limit."""
+    line = {"product_id": menu["rice"].pk, "quantity": 1_052_000}
+    body = {**sample_request, "items": [line], "bill": "99999999.99"}
+
+    response = place(body)
+
+    assert response.status_code == 201, response.data
+    assert response.data["items_total"] == "99940000.00"
+    assert new_orders() == 1
+
+
+def test_quantity_above_the_column_range_is_400(place, sample_request) -> None:
+    """A ₱0.01 item keeps the money small, so only the quantity overflows."""
+    from django.db import connection
+
+    from orders.models import Product
+
+    _, largest = connection.ops.integer_field_range("PositiveIntegerField")
+    cheap = Product.objects.create(shop_id=1, name="Candy", price=Decimal("0.01"))
+    line = {"product_id": cheap.pk, "quantity": largest + 1}
+
+    response = place({**sample_request, "items": [line], "bill": "99999999.99"})
+
+    assert response.status_code == 400
+    assert "items" in response.data
+
+
+def test_delivery_fee_too_large_is_400(place, sample_request, set_settings) -> None:
+    set_settings(delivery_per_km=99_999)
+
+    response = place(
+        {**sample_request, "distance_km": "9999.999", "bill": "99999999.99"}
+    )
+
+    assert response.status_code == 400
+    assert "distance_km" in response.data
+
+
 def test_same_product_twice_rejected(place, sample_request) -> None:
     line = sample_request["items"][0]
 

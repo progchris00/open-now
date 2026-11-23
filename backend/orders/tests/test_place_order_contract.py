@@ -88,18 +88,23 @@ def test_anonymous_request_matches_the_schema(operation, sample_request) -> None
 def test_generated_requests_never_break_the_contract(operation, menu, data) -> None:
     """Customer requests built from the schema get documented answers only.
 
-    The positive_data_acceptance check is left out on purpose: a request can
-    match the schema and still name a product that doesn't exist, which is
-    correctly refused with 400. Every other check (no server error, documented
-    status codes, response bodies that match the schema) still runs.
+    Two checks are left out on purpose:
+    - positive_data_acceptance: a request can match the schema and still name
+      a product that doesn't exist, which is correctly refused with 400.
+    - ignored_auth: this test signs in by adding the Authorization header
+      itself, which Schemathesis can't strip, so its "invalid credentials"
+      retry still carries valid ones. test_anonymous_gets_403 and
+      test_non_customer_gets_403 cover authentication instead.
+    Every other check (no server error, documented status codes, response
+    bodies that match the schema) still runs.
     """
-    from schemathesis.checks import positive_data_acceptance
+    from schemathesis.checks import ignored_auth, positive_data_acceptance
 
     customer = make_user(customer=True)
     case = data.draw(operation.as_strategy())
     case.headers = {**(case.headers or {}), "Authorization": basic_auth(customer)}
 
-    case.call_and_validate(excluded_checks=[positive_data_acceptance])
+    case.call_and_validate(excluded_checks=[positive_data_acceptance, ignored_auth])
 
 
 def test_schema_states_the_request_rules(migrated_database) -> None:
@@ -113,6 +118,8 @@ def test_schema_states_the_request_rules(migrated_database) -> None:
     properties["payment_method"] = components[method_ref.rsplit("/", 1)[-1]]
 
     assert properties["items"]["minItems"] == 1
+    line = components["PlaceOrderLine"]["properties"]
+    assert line["quantity"]["maximum"] == 2147483647
     assert properties["payment_method"]["enum"] == ["cod"]
     for name in ("bill", "distance_km"):
         assert not properties[name]["pattern"].startswith("^-"), name

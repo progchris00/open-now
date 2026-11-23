@@ -13,11 +13,18 @@ later price or settings change never alters an order already placed.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import models
 from django.db.models import F, Q
 
 MONEY = {"max_digits": 10, "decimal_places": 2}
+
+# The largest amount a money column can hold: 99,999,999.99 for MONEY above.
+MAX_PESOS = Decimal(10) ** (MONEY["max_digits"] - MONEY["decimal_places"]) - (
+    Decimal(1).scaleb(-MONEY["decimal_places"])
+)
 
 
 class Product(models.Model):

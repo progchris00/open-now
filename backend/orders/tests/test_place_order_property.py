@@ -83,6 +83,50 @@ def test_bill_below_total_always_rejected(lines, delivery, fee, short) -> None:
         price_order(lines=lines, delivery_fee=delivery, service_fee=fee, bill=bill)
 
 
+@given(
+    price=st.decimals(
+        min_value=Decimal("0.01"), max_value=Decimal("99999.99"), places=2
+    ),
+    quantity=st.integers(min_value=1, max_value=2_147_483_647),
+)
+@example(price=Decimal("250.00"), quantity=1_000_000)
+@example(price=Decimal("95.00"), quantity=1_052_000)
+def test_amounts_either_fit_the_columns_or_are_refused(price, quantity) -> None:
+    """No amount ever reaches the database that a money column can't hold."""
+    from orders.models import MAX_PESOS
+    from orders.services import OrderTooLarge, price_order
+
+    line_total = price * quantity
+    try:
+        totals = price_order(
+            lines=[(price, quantity)],
+            delivery_fee=Decimal("59"),
+            service_fee=Decimal("5"),
+            bill=MAX_PESOS,
+        )
+    except OrderTooLarge:
+        assert line_total + 64 > MAX_PESOS
+    else:
+        amounts = [*totals.line_totals, totals.items_total, totals.total]
+        assert all(amount <= MAX_PESOS for amount in amounts)
+
+
+def test_parts_that_fit_but_sum_too_large_are_refused() -> None:
+    """Items and delivery each fit a column, but their total doesn't."""
+    from orders.models import MAX_PESOS
+    from orders.services import OrderTooLarge, price_order
+
+    with pytest.raises(OrderTooLarge) as raised:
+        price_order(
+            lines=[(MAX_PESOS - Decimal("10"), 1)],
+            delivery_fee=Decimal("59"),
+            service_fee=Decimal("5"),
+            bill=MAX_PESOS,
+        )
+
+    assert raised.value.field == "items"
+
+
 @settings(
     max_examples=40,
     deadline=None,

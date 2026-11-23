@@ -260,11 +260,13 @@ components:
         quantity:
           type: integer
           minimum: 1
+          maximum: 2147483647
     PlaceOrder:
-      type: object
       description: >-
         What the customer sends. Prices, fees and totals are never read from
-        it; the server works them out.
+        it; the server works them out. Orders whose amounts would exceed
+        99,999,999.99 are refused with 400.
+      type: object
       required:
         - items
         - distance_km

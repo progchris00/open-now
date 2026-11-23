@@ -140,7 +140,7 @@ export interface components {
             product_id: number;
             quantity: number;
         };
-        /** @description What the customer sends. Prices, fees and totals are never read from it; the server works them out. */
+        /** @description What the customer sends. Prices, fees and totals are never read from it; the server works them out. Orders whose amounts would exceed 99,999,999.99 are refused with 400. */
         PlaceOrder: {
             items: components["schemas"]["PlaceOrderLine"][];
             /**

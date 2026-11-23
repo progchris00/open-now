@@ -30,7 +30,7 @@ from pricing.delivery_fee import delivery_fee_for_km
 from settings_store.cache import get_setting
 
 from .cash import change_due, order_total, to_peso
-from .models import Order, OrderItem, OrderStatusHistory, Product
+from .models import MAX_PESOS, Order, OrderItem, OrderStatusHistory, Product
 
 
 class PlacementError(ValueError):
@@ -46,6 +46,12 @@ class PlacementError(ValueError):
 
 class BillTooSmall(PlacementError):
     field = "bill"
+
+
+class OrderTooLarge(PlacementError):
+    """An amount wouldn't fit the order's money columns."""
+
+    field = "items"
 
 
 class KeyReused(Exception):
@@ -80,11 +86,21 @@ def price_order(
 ) -> Totals:
     """Work out an order's money from (unit price, quantity) lines.
 
-    Raises BillTooSmall when the bill is below the total.
+    Raises OrderTooLarge when an amount wouldn't fit a money column, and
+    BillTooSmall when the bill is below the total. Size is checked first, so
+    a huge order gets a clear message instead of an impossible bill.
     """
     line_totals = tuple(to_peso(price * quantity) for price, quantity in lines)
     items_total = sum(line_totals, Decimal("0"))
+    if items_total > MAX_PESOS:
+        raise OrderTooLarge(f"Orders can't be more than ₱{MAX_PESOS:,.2f}.")
+    if to_peso(delivery_fee) > MAX_PESOS:
+        raise OrderTooLarge(
+            "The delivery fee for this distance is too large.", field="distance_km"
+        )
     total = order_total(items_total, delivery_fee, service_fee, discount=discount)
+    if total > MAX_PESOS:
+        raise OrderTooLarge(f"Orders can't be more than ₱{MAX_PESOS:,.2f}.")
     try:
         change = change_due(bill=bill, total=total)
     except ValueError as error:
