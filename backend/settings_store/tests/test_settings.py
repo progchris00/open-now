@@ -88,6 +88,10 @@ def test_seeded_defaults_match_example_values(admin_client) -> None:
         "pickup_reassign_minutes",
         "failed_calls",
         "failed_wait_minutes",
+        "sms_max_retries",
+        "sms_retry_backoff_seconds",
+        "sms_retry_backoff_multiplier",
+        "sms_request_timeout_seconds",
     }
     assert settings["service_fee_per_order"]["value"] == 5
     assert settings["payment_method"]["value"] == "cod"

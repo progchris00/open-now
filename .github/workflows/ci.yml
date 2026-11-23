@@ -63,6 +63,10 @@ jobs:
         run: >-
           uv run --project backend pytest backend/pricing/tests
           --cov=backend/pricing --cov-branch --cov-fail-under=80
+      - name: Run SMS tests with coverage
+        run: >-
+          uv run --project backend pytest backend/sms/tests
+          --cov=backend/sms --cov-branch --cov-fail-under=80
       - name: Enforce audit package coverage
         run: >-
           uv run --project backend pytest backend/audit/tests

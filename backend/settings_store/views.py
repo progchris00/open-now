@@ -46,6 +46,10 @@ RULES = {
     "pickup_reassign_minutes": {"type": int, "min": 0},
     "failed_calls": {"type": int, "min": 1},
     "failed_wait_minutes": {"type": int, "min": 0},
+    "sms_max_retries": {"type": int, "min": 0},
+    "sms_retry_backoff_seconds": {"type": int, "min": 0},
+    "sms_retry_backoff_multiplier": {"type": int, "min": 1},
+    "sms_request_timeout_seconds": {"type": int, "min": 1},
 }
 
 
