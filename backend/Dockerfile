@@ -6,6 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgdal36 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system app \
     && useradd --system --gid app --create-home app
 

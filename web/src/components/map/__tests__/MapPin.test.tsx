@@ -1,44 +1,17 @@
 import { act, render, screen } from "@testing-library/react";
-import type { ComponentType } from "react";
 import { expect, test, vi } from "vitest";
 
+import { MapPin, type MapMountOptions } from "../MapPin";
 
 type Point = {
   latitude: number;
   longitude: number;
 };
 
-type DriverOptions = {
-  onError: (message: string) => void;
-  onPointChange: (point: Point) => void;
-  onReady: () => void;
-};
-
-type MapPinProps = {
-  driver: {
-    mount: (options: DriverOptions) => () => void;
-  };
-  initialPoint: Point;
-  onPointChange: (point: Point) => void;
-  tilesUrl: string;
-};
-
-
-async function loadMapPin(): Promise<ComponentType<MapPinProps> | null> {
-  const componentPath = "../MapPin";
-  try {
-    const loaded = await import(/* @vite-ignore */ componentPath);
-    return loaded.MapPin as ComponentType<MapPinProps>;
-  } catch {
-    return null;
-  }
-}
-
-
 function readyDriver() {
   let emitDrag: ((point: Point) => void) | undefined;
   const driver = {
-    mount: vi.fn((options: DriverOptions) => {
+    mount: vi.fn((options: MapMountOptions) => {
       emitDrag = options.onPointChange;
       options.onReady();
       return vi.fn();
@@ -53,11 +26,7 @@ function readyDriver() {
 }
 
 
-test("renders_attribution", async () => {
-  const MapPin = await loadMapPin();
-  expect(MapPin, "MapPin has not been implemented yet").not.toBeNull();
-  if (!MapPin) return;
-
+test("renders_attribution", () => {
   const { driver } = readyDriver();
   render(
     <MapPin
@@ -77,11 +46,7 @@ test("renders_attribution", async () => {
 });
 
 
-test("emits_point_on_drag", async () => {
-  const MapPin = await loadMapPin();
-  expect(MapPin, "MapPin has not been implemented yet").not.toBeNull();
-  if (!MapPin) return;
-
+test("emits_point_on_drag", () => {
   const onPointChange = vi.fn();
   const { driver, drag } = readyDriver();
   render(
@@ -100,4 +65,41 @@ test("emits_point_on_drag", async () => {
     latitude: 14.6091,
     longitude: 121.0223,
   });
+});
+
+test("reports missing tiles, loading and failure, and releases its map", () => {
+  let fail: MapMountOptions["onError"] | undefined;
+  const dispose = vi.fn();
+  const driver = {
+    mount: vi.fn((options: MapMountOptions) => {
+      fail = options.onError;
+      return dispose;
+    }),
+  };
+  const props = {
+    driver,
+    initialPoint: { latitude: 14.6, longitude: 121 },
+    onPointChange: vi.fn(),
+  };
+  const { rerender, unmount } = render(<MapPin {...props} tilesUrl="" />);
+  expect(screen.getByText(/map tiles are not configured/i)).toBeDefined();
+  expect(driver.mount).not.toHaveBeenCalled();
+  rerender(<MapPin {...props} tilesUrl="https://maps.example.test/philippines.pmtiles" />);
+  expect(screen.getByRole("status").textContent).toMatch(/loading/i);
+  act(() => fail?.("Unavailable"));
+  expect(screen.getByRole("alert").textContent).toMatch(/unavailable/i);
+  unmount();
+  expect(dispose).toHaveBeenCalledOnce();
+});
+
+test("shows an error if the browser cannot initialize the map", () => {
+  render(
+    <MapPin
+      driver={{ mount() { throw new Error("WebGL unavailable"); } }}
+      initialPoint={{ latitude: 14.6, longitude: 121 }}
+      onPointChange={vi.fn()}
+      tilesUrl="https://maps.example.test/philippines.pmtiles"
+    />,
+  );
+  expect(screen.getByRole("alert").textContent).toMatch(/webgl/i);
 });

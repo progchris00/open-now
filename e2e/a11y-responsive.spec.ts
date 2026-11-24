@@ -1,17 +1,5 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-
-
-const axePackage = "@axe-core/playwright";
-
-
-async function loadAxeBuilder() {
-  try {
-    const loaded = await import(axePackage);
-    return loaded.default;
-  } catch {
-    return null;
-  }
-}
 
 
 for (const viewport of [
@@ -47,13 +35,6 @@ for (const viewport of [
       expect(mapBox.x).toBeGreaterThan(formBox.x + formBox.width - 8);
       expect(mapBox.width).toBeGreaterThan(viewport.width >= 1280 ? 560 : 300);
     }
-
-    const AxeBuilder = await loadAxeBuilder();
-    expect(
-      AxeBuilder,
-      "@axe-core/playwright has not been installed yet",
-    ).not.toBeNull();
-    if (!AxeBuilder) return;
 
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);

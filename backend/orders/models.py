@@ -16,6 +16,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.conf import settings
+from django.contrib.gis.db.models import PointField
 from django.db import connection, models
 from django.db.models import F, Q
 
@@ -77,6 +78,7 @@ class Order(models.Model):
     total = models.DecimalField(**MONEY)
     bill = models.DecimalField(**MONEY)
     change = models.DecimalField(**MONEY)
+    pin = PointField(srid=4326, geography=True, null=True, blank=True)
 
     idempotency_key = models.CharField(max_length=IDEMPOTENCY_KEY_MAX_LENGTH)
     request_fingerprint = models.CharField(max_length=64)

@@ -1,0 +1,62 @@
+.shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: #dce8df;
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 1.25rem;
+  background: rgb(237 243 238 / 94%);
+  color: #526159;
+  text-align: center;
+}
+
+.state strong {
+  color: var(--ink);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.ready {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.attribution {
+  position: absolute;
+  right: 0.4rem;
+  bottom: 0.4rem;
+  z-index: 1;
+  margin: 0;
+  border-radius: 0.25rem;
+  padding: 0.2rem 0.35rem;
+  background: rgb(255 255 255 / 88%);
+  color: #34443a;
+  font-size: 0.68rem;
+}
+
+.attribution a {
+  color: inherit;
+}
