@@ -28,10 +28,18 @@ HOLD_SECONDS = 0.3
 
 
 @pytest.fixture
-def committed_order(migrated_database):
+def committed_order(migrated_database, monkeypatch):
     from decimal import Decimal
 
     from django.contrib.auth import get_user_model
+
+    import orders.notify
+    import orders.services
+
+    # These rows really commit, so after-commit hooks really run. This test is
+    # about the row lock, not the broker: keep both queue calls local.
+    monkeypatch.setattr(orders.services, "_start_accept_timer", lambda order_id: None)
+    monkeypatch.setattr(orders.notify, "order_status_changed", lambda *args: None)
 
     from audit.models import AuditLog
     from orders.models import Order, OrderItem, OrderStatusHistory, Product, ShopMember

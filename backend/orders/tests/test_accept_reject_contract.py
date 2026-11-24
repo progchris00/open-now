@@ -32,6 +32,7 @@ def test_anonymous_call_matches_contract(schema, path, body) -> None:
     kwargs = {"path_parameters": {"id": 1}}
     if body is not None:
         kwargs["body"] = body
+        kwargs["media_type"] = "application/json"
     case = operation.Case(**kwargs)
 
     response = case.call_and_validate()
