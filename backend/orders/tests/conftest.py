@@ -149,3 +149,49 @@ def place(sample_order):
         )
 
     return call
+
+
+# --- Merchant side (S2-15.1) --------------------------------------------------
+
+SAMPLE_SHOP_ID = 1
+OTHER_SHOP_ID = 2
+
+
+def make_member(shop_id: int):
+    """A user who works at shop_id (TEMPORARY ShopMember until a Shop exists)."""
+    from orders.models import ShopMember
+
+    user = make_customer()
+    ShopMember.objects.create(user=user, shop_id=shop_id)
+    return user
+
+
+@pytest.fixture
+def merchant(set_settings):
+    return make_member(SAMPLE_SHOP_ID)
+
+
+@pytest.fixture
+def other_merchant(set_settings):
+    return make_member(OTHER_SHOP_ID)
+
+
+@pytest.fixture
+def new_order(place):
+    """The sample order, placed and still New, from shop SAMPLE_SHOP_ID."""
+    order, _ = place()
+    return order
+
+
+@pytest.fixture
+def api():
+    """An APIClient logged in as the given user (or anonymous for None)."""
+    from rest_framework.test import APIClient
+
+    def client(user=None):
+        c = APIClient()
+        if user is not None:
+            c.force_authenticate(user=user)
+        return c
+
+    return client
