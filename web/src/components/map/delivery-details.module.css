@@ -1,0 +1,117 @@
+.page {
+  width: min(100%, 90rem);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(1rem, 3vw, 2.5rem);
+}
+
+.header {
+  max-width: 48rem;
+  margin-bottom: 1.5rem;
+}
+
+.header h1 {
+  font-size: clamp(2rem, 6vw, 4.5rem);
+}
+
+.header > p:last-child {
+  max-width: 42rem;
+  margin: 1rem 0 0;
+  color: #526159;
+  line-height: 1.6;
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.content {
+  display: grid;
+  grid-template-areas:
+    "map"
+    "form";
+  gap: 1.25rem;
+}
+
+.form {
+  display: grid;
+  grid-area: form;
+  gap: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  padding: 1.25rem;
+  background: var(--surface);
+}
+
+.form label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 700;
+}
+
+.form input,
+.form textarea {
+  width: 100%;
+  border: 1px solid #aebbb1;
+  border-radius: 0.6rem;
+  padding: 0.75rem;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+}
+
+.form input:focus-visible,
+.form textarea:focus-visible,
+.form button:focus-visible {
+  outline: 3px solid #74bd9b;
+  outline-offset: 2px;
+}
+
+.mapPanel {
+  grid-area: map;
+  width: 100%;
+  height: 180px;
+}
+
+.coordinates,
+.handoff {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+@media (min-width: 768px) {
+  .content {
+    grid-template-areas: "form map";
+    grid-template-columns: minmax(17rem, 0.82fr) minmax(0, 1.18fr);
+    align-items: start;
+    gap: 1.5rem;
+  }
+
+  .mapPanel {
+    position: sticky;
+    top: 1.5rem;
+    height: clamp(28rem, 66vh, 38rem);
+  }
+}
+
+@media (min-width: 1280px) {
+  .content {
+    grid-template-columns: minmax(22rem, 0.72fr) minmax(42rem, 1.28fr);
+    gap: 3rem;
+  }
+
+  .form {
+    padding: 2rem;
+  }
+
+  .mapPanel {
+    height: min(68vh, 44rem);
+  }
+}

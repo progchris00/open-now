@@ -25,6 +25,8 @@ services:
   web:
     build:
       context: ./web
+    environment:
+      MAP_TILES_URL: ${MAP_TILES_URL:-}
 
   api:
     <<: *backend
