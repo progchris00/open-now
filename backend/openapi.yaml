@@ -148,6 +148,70 @@ paths:
           description: Invalid correction
         "403":
           description: User is not an administrator
+  /api/merchant/orders/{id}/accept:
+    post:
+      operationId: acceptMerchantOrder
+      summary: Accept a New order for the caller's shop (safe to repeat)
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The order is Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MerchantDecision"
+        "403":
+          description: Not signed in, or the order is not this shop's (or does not exist)
+        "409":
+          description: Already decided the other way, or the accept time has passed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionError"
+  /api/merchant/orders/{id}/reject:
+    post:
+      operationId: rejectMerchantOrder
+      summary: Reject a New order for the caller's shop with a reason (safe to repeat)
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectRequest"
+      responses:
+        "200":
+          description: The order is Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MerchantDecision"
+        "400":
+          description: Missing, blank or too long reason
+        "403":
+          description: Not signed in, or the order is not this shop's (or does not exist)
+        "409":
+          description: Already decided the other way, or the accept time has passed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionError"
 components:
   securitySchemes:
     sessionAuth:
@@ -321,3 +385,39 @@ components:
         reason:
           type: string
           minLength: 1
+    OrderStatus:
+      type: string
+      enum: [new, accepted, rejected]
+    MerchantDecision:
+      type: object
+      additionalProperties: false
+      required: [id, status, accept_deadline, reject_reason]
+      properties:
+        id:
+          type: integer
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        accept_deadline:
+          type: string
+          format: date-time
+        reject_reason:
+          type: [string, "null"]
+    RejectRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    DecisionError:
+      type: object
+      additionalProperties: false
+      required: [code, detail]
+      properties:
+        code:
+          type: string
+          enum: [not_allowed, deadline_passed]
+        detail:
+          type: string

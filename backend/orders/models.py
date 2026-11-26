@@ -29,6 +29,31 @@ MAX_PESOS = Decimal(10) ** (MONEY["max_digits"] - MONEY["decimal_places"]) - (
 # The largest OrderItem.quantity the database stores (2,147,483,647 on PostgreSQL).
 MAX_QUANTITY = connection.ops.integer_field_range("PositiveIntegerField")[1]
 IDEMPOTENCY_KEY_MAX_LENGTH = 100
+REJECT_REASON_MAX_LENGTH = 500
+
+
+class ShopMember(models.Model):
+    """TEMPORARY link from a user to the shop they work at (S2-15.1).
+
+    There is no Shop model or merchant role yet, so shop_id is the same plain
+    number Order.shop_id uses. The merchant sign-up story should replace this
+    with its own Shop and staff model and point the permission check at it.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="shops"
+    )
+    shop_id = models.PositiveBigIntegerField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "shop_id"], name="orders_shopmember_once_per_shop"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} @ shop {self.shop_id}"
 
 
 class Product(models.Model):
@@ -56,6 +81,8 @@ class Product(models.Model):
 class Order(models.Model):
     class Status(models.TextChoices):
         NEW = "new", "New"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
 
     class PaymentMethod(models.TextChoices):
         CASH_ON_DELIVERY = "cod", "Cash on delivery"
@@ -174,9 +201,19 @@ class OrderStatusHistory(models.Model):
         related_name="order_status_changes",
     )
     changed_at = models.DateTimeField(auto_now_add=True)
+    # Why the shop rejected the order; empty for every other status.
+    reason = models.CharField(
+        max_length=REJECT_REASON_MAX_LENGTH, blank=True, default=""
+    )
 
     class Meta:
         ordering = ["changed_at", "pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(status="rejected") | ~Q(reason=""),
+                name="orders_history_rejected_has_reason",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"Order {self.order_id} -> {self.status}"

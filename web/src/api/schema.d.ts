@@ -106,6 +106,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/merchant/orders/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept a New order for the caller's shop (safe to repeat) */
+        post: operations["acceptMerchantOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/merchant/orders/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a New order for the caller's shop with a reason (safe to repeat) */
+        post: operations["rejectMerchantOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -177,6 +211,23 @@ export interface components {
             from: components["schemas"]["CashParty"];
             to: components["schemas"]["CashParty"];
             reason: string;
+        };
+        /** @enum {string} */
+        OrderStatus: "new" | "accepted" | "rejected";
+        MerchantDecision: {
+            id: number;
+            status: components["schemas"]["OrderStatus"];
+            /** Format: date-time */
+            accept_deadline: string;
+            reject_reason: string | null;
+        };
+        RejectRequest: {
+            reason: string;
+        };
+        DecisionError: {
+            /** @enum {string} */
+            code: "not_allowed" | "deadline_passed";
+            detail: string;
         };
     };
     responses: never;
@@ -391,6 +442,93 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    acceptMerchantOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The order is Accepted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantDecision"];
+                };
+            };
+            /** @description Not signed in, or the order is not this shop's (or does not exist) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Already decided the other way, or the accept time has passed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionError"];
+                };
+            };
+        };
+    };
+    rejectMerchantOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectRequest"];
+            };
+        };
+        responses: {
+            /** @description The order is Rejected */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantDecision"];
+                };
+            };
+            /** @description Missing, blank or too long reason */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in, or the order is not this shop's (or does not exist) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Already decided the other way, or the accept time has passed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionError"];
+                };
             };
         };
     };
